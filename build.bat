@@ -1,4 +1,16 @@
 @echo off
+:: Check for administrative privileges
+net session >nul 2>&1
+if %errorLevel% == 0 (
+    goto :admin
+) else (
+    echo Requesting Administrative privileges...
+    powershell -Command "Start-Process '%~dpnx0' -Verb RunAs"
+    exit /b
+)
+
+:admin
+cd /d "%~dp0"
 echo =======================================================
 echo   AI Customer Service Translator - Windows Packaging Tool
 echo =======================================================
