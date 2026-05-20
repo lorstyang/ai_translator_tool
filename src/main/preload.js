@@ -19,6 +19,11 @@ contextBridge.exposeInMainWorld('api', {
   },
   translation: {
     translate: (text) => ipcRenderer.invoke('translate-text', text),
+    chat: (messages) => ipcRenderer.invoke('normal-chat', messages),
+  },
+  settings: {
+    get: () => ipcRenderer.invoke('get-settings'),
+    save: (settings) => ipcRenderer.invoke('save-settings', settings),
   },
   history: {
     get: () => ipcRenderer.invoke('get-history'),
