@@ -215,22 +215,49 @@ ipcMain.handle('save-history', async (event, history) => {
 
 // IPC: Call OpenAI translation
 ipcMain.handle('translate-text', async (event, text) => {
-  const settings = readSettings();
-  const config = {
-    apiKey: settings.apiKey,
-    baseUrl: settings.baseUrl,
-    modelName: settings.modelName,
-  };
-  return await translateCustomerMessage(text, config);
+  try {
+    const settings = readSettings();
+    const config = {
+      apiKey: settings.apiKey,
+      baseUrl: settings.baseUrl,
+      modelName: settings.modelName,
+      translatePrompt: settings.translatePrompt
+    };
+    const result = await translateCustomerMessage(text, config);
+    return { success: true, ...result };
+  } catch (error) {
+    console.error('Translation IPC error:', error);
+    let errorMsg = error.message;
+    if (error.error && error.error.message) {
+      errorMsg = error.error.message;
+    }
+    if (error.status) {
+      errorMsg = `[中转站 API 报错 - HTTP ${error.status}] ${errorMsg}`;
+    }
+    return { success: false, error: errorMsg };
+  }
 });
 
 // IPC: Call OpenAI normal chat
 ipcMain.handle('normal-chat', async (event, messages) => {
-  const settings = readSettings();
-  const config = {
-    apiKey: settings.apiKey,
-    baseUrl: settings.baseUrl,
-    modelName: settings.modelName,
-  };
-  return await normalChat(messages, config);
+  try {
+    const settings = readSettings();
+    const config = {
+      apiKey: settings.apiKey,
+      baseUrl: settings.baseUrl,
+      modelName: settings.modelName,
+    };
+    const reply = await normalChat(messages, config);
+    return { success: true, reply };
+  } catch (error) {
+    console.error('Chat IPC error:', error);
+    let errorMsg = error.message;
+    if (error.error && error.error.message) {
+      errorMsg = error.error.message;
+    }
+    if (error.status) {
+      errorMsg = `[中转站 API 报错 - HTTP ${error.status}] ${errorMsg}`;
+    }
+    return { success: false, error: errorMsg };
+  }
 });

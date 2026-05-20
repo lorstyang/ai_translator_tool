@@ -155,6 +155,10 @@ export default function App() {
       if (!window.api) throw new Error('无法连接到主进程。');
       const result = await window.api.translation.translate(inputText.trim());
       
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      
       setTaiwanOutput(result.taiwan);
       setEnglishOutput(result.english);
 
@@ -224,11 +228,15 @@ export default function App() {
         content: msg.content
       }));
 
-      const assistantReply = await window.api.translation.chat(apiMessages);
+      const result = await window.api.translation.chat(apiMessages);
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
 
       const assistantMessage = {
         role: 'assistant',
-        content: assistantReply,
+        content: result.reply,
         id: Date.now() + 1,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
