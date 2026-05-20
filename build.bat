@@ -3,6 +3,10 @@ echo =======================================================
 echo   AI Customer Service Translator - Windows Packaging Tool
 echo =======================================================
 echo.
+REM Set environment variables for Electron and Builder mirror sources
+set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+set ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
+
 echo Step 1: Installing dependencies...
 call npm install
 if %errorlevel% neq 0 (

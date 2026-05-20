@@ -3,6 +3,9 @@ echo =======================================================
 echo   AI Customer Service Translator - Windows Update Utility
 echo =======================================================
 echo.
+REM Set environment variables for Electron mirror source
+set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+
 echo Step 1: Pulling latest changes from git...
 git pull
 if %errorlevel% neq 0 (
