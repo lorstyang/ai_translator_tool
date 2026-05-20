@@ -1,5 +1,5 @@
 const { OpenAI } = require('openai');
-const { HttpsProxyAgent } = require('https-proxy-agent');
+const HttpsProxyAgent = require('https-proxy-agent');
 
 /**
  * Creates and returns an OpenAI client instance based on config or .env fallbacks
