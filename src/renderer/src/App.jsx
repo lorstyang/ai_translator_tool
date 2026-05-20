@@ -136,9 +136,11 @@ export default function App() {
 
   // --- Translation Actions ---
   const handleTranslateKeyDown = (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      handleTranslate();
+    if (e.key === 'Enter') {
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        handleTranslate();
+      }
     }
   };
 
@@ -444,7 +446,7 @@ export default function App() {
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleTranslateKeyDown}
-                  placeholder="请输入客服原文，按 Ctrl + Enter 翻译..."
+                  placeholder="请输入客服原文，按 Enter 翻译，Ctrl + Enter 换行..."
                   className="glass-input w-full rounded-lg p-2.5 text-xs resize-none focus:outline-none placeholder:text-slate-500 text-slate-100 leading-relaxed font-sans"
                 />
                 <div className="absolute bottom-2 right-2 text-[9px] text-slate-500 font-mono">
@@ -539,41 +541,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Bottom inline Drawer */}
-            <footer className="shrink-0 bg-slate-950/60 border border-slate-800/60 rounded-lg flex flex-col overflow-hidden">
-              <button
-                onClick={() => setShowTranslateHistory(!showTranslateHistory)}
-                className="w-full px-3 py-2 flex items-center justify-between text-slate-400 hover:text-slate-200 transition-colors text-[10px] font-semibold"
-              >
-                <div className="flex items-center space-x-1">
-                  <History className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>最近翻译记录 ({history.translations.length})</span>
-                </div>
-                {showTranslateHistory ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
-              </button>
-              
-              {showTranslateHistory && (
-                <div className="max-h-28 overflow-y-auto border-t border-slate-900/60 p-2 space-y-1.5 bg-slate-950/30">
-                  {history.translations.length === 0 ? (
-                    <p className="text-center text-slate-600 italic text-[10px] py-2">无历史记录</p>
-                  ) : (
-                    history.translations.slice(0, 10).map((item) => (
-                      <div 
-                        key={item.id} 
-                        onClick={() => selectTranslateHistoryItem(item)}
-                        className="p-1.5 rounded bg-slate-900/40 hover:bg-slate-900 border border-slate-800/30 hover:border-slate-800 cursor-pointer transition-all flex flex-col text-[11px]"
-                      >
-                        <div className="flex justify-between text-[9px] text-slate-500 font-mono mb-0.5">
-                          <span>{item.timestamp}</span>
-                          <span className="opacity-0 hover:opacity-100 text-indigo-400">使用</span>
-                        </div>
-                        <p className="text-slate-300 truncate font-medium">{item.original}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </footer>
+            {/* History logs are managed in the History tab */}
           </div>
         )}
 

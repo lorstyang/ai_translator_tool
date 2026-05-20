@@ -103,24 +103,21 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
   }
 
-  // Debounced listener to persist window bounds (size & position)
-  let saveTimeout;
-  const handleBoundsChange = () => {
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
-      if (!mainWindow) return;
-      const bounds = mainWindow.getBounds();
-      writeSettings({
-        width: bounds.width,
-        height: bounds.height,
-        x: bounds.x,
-        y: bounds.y
-      });
-    }, 500);
+  // Save window bounds on resize/move finished or window close to optimize drag performance
+  const saveBounds = () => {
+    if (!mainWindow) return;
+    const bounds = mainWindow.getBounds();
+    writeSettings({
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y
+    });
   };
 
-  mainWindow.on('resize', handleBoundsChange);
-  mainWindow.on('move', handleBoundsChange);
+  mainWindow.on('resized', saveBounds);
+  mainWindow.on('moved', saveBounds);
+  mainWindow.on('close', saveBounds);
 
   mainWindow.on('closed', () => {
     mainWindow = null;

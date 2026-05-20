@@ -31,11 +31,9 @@
   -webkit-app-region: no-drag;
 }
 
-/* Custom Glassmorphism styles */
+/* Custom Glassmorphism styles - Optimized for Electron performance */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: linear-gradient(135deg, #0f172a 0%, #0b0f19 100%);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
