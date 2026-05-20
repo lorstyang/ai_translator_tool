@@ -77,7 +77,8 @@ function readSettings() {
         apiKey: parsed.apiKey || '',
         baseUrl: parsed.baseUrl || 'https://api.openai.com/v1',
         modelName: parsed.modelName || 'gpt-4o-mini',
-        translatePrompt: parsed.translatePrompt || DEFAULT_PROMPT
+        translatePrompt: parsed.translatePrompt || DEFAULT_PROMPT,
+        proxyUrl: parsed.proxyUrl !== undefined ? parsed.proxyUrl : 'http://127.0.0.1:7890'
       };
     }
   } catch (error) {
@@ -88,7 +89,8 @@ function readSettings() {
     height: 580,
     baseUrl: 'https://api.openai.com/v1',
     modelName: 'gpt-4o-mini',
-    translatePrompt: DEFAULT_PROMPT
+    translatePrompt: DEFAULT_PROMPT,
+    proxyUrl: 'http://127.0.0.1:7890'
   };
 }
 
@@ -221,7 +223,8 @@ ipcMain.handle('translate-text', async (event, text) => {
       apiKey: settings.apiKey,
       baseUrl: settings.baseUrl,
       modelName: settings.modelName,
-      translatePrompt: settings.translatePrompt
+      translatePrompt: settings.translatePrompt,
+      proxyUrl: settings.proxyUrl
     };
     const result = await translateCustomerMessage(text, config);
     return { success: true, ...result };
@@ -246,6 +249,7 @@ ipcMain.handle('normal-chat', async (event, messages) => {
       apiKey: settings.apiKey,
       baseUrl: settings.baseUrl,
       modelName: settings.modelName,
+      proxyUrl: settings.proxyUrl
     };
     const reply = await normalChat(messages, config);
     return { success: true, reply };

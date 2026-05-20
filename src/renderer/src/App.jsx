@@ -33,7 +33,8 @@ export default function App() {
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
     modelName: 'gpt-4o-mini',
-    translatePrompt: ''
+    translatePrompt: '',
+    proxyUrl: 'http://127.0.0.1:7890'
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -83,7 +84,8 @@ export default function App() {
               apiKey: savedSettings.apiKey || '',
               baseUrl: savedSettings.baseUrl || 'https://api.openai.com/v1',
               modelName: savedSettings.modelName || 'gpt-4o-mini',
-              translatePrompt: savedSettings.translatePrompt || ''
+              translatePrompt: savedSettings.translatePrompt || '',
+              proxyUrl: savedSettings.proxyUrl !== undefined ? savedSettings.proxyUrl : 'http://127.0.0.1:7890'
             });
           }
         })
@@ -837,6 +839,18 @@ export default function App() {
                   value={settings.baseUrl}
                   onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
                   placeholder="https://api.openai.com/v1"
+                  className="glass-input w-full rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono"
+                />
+              </div>
+
+              {/* Proxy URL */}
+              <div className="space-y-1 shrink-0">
+                <label className="text-[10px] font-bold text-slate-400">网络代理 (Proxy URL)</label>
+                <input
+                  type="text"
+                  value={settings.proxyUrl}
+                  onChange={(e) => setSettings({ ...settings, proxyUrl: e.target.value })}
+                  placeholder="例如: http://127.0.0.1:7890 (留空则直连)"
                   className="glass-input w-full rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono"
                 />
               </div>

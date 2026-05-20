@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "dotenv": "^16.4.5",
+    "https-proxy-agent": "^9.0.0",
     "lucide-react": "^0.395.0",
     "openai": "^4.52.0",
     "react": "^18.3.1",

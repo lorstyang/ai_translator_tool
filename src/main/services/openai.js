@@ -1,4 +1,5 @@
 const { OpenAI } = require('openai');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 /**
  * Creates and returns an OpenAI client instance based on config or .env fallbacks
@@ -6,16 +7,23 @@ const { OpenAI } = require('openai');
 async function getOpenAIClient(config) {
   const apiKey = config.apiKey || process.env.OPENAI_API_KEY;
   const baseURL = config.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+  const proxyUrl = config.proxyUrl || process.env.HTTP_PROXY || process.env.http_proxy || process.env.HTTPS_PROXY || process.env.https_proxy;
 
   if (!apiKey || apiKey === 'your-api-key-here') {
     throw new Error('未检测到有效的 OpenAI API 密钥。请在“设置”页面中配置您的 API Key。');
   }
 
-  return new OpenAI({
+  const clientOptions = {
     apiKey,
     baseURL,
     timeout: 25000, // 25 seconds timeout
-  });
+  };
+
+  if (proxyUrl && proxyUrl.trim() !== '') {
+    clientOptions.httpAgent = new HttpsProxyAgent(proxyUrl.trim());
+  }
+
+  return new OpenAI(clientOptions);
 }
 
 /**
