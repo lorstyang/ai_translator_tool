@@ -19,13 +19,29 @@ async function getOpenAIClient(config) {
 }
 
 /**
+ * Wraps a promise in a hard timeout to prevent indefinite hangs (especially on Windows DNS/TCP stalls)
+ */
+async function requestWithTimeout(promise, ms = 20000) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`请求超时 (${ms / 1000}秒)。请检查网络连接或 VPN 代理设置。在 Windows 上，请确保 VPN 开启了「TUN 模式」或「虚拟网卡模式」以接管 Node.js 流量；或者在“设置”中配置国内中转 API 地址。`));
+    }, ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+}
+
+/**
  * Executes a function with simple retry logic for connection/server errors
  */
 async function requestWithRetry(fn, retries = 2) {
   let lastError;
   for (let i = 0; i <= retries; i++) {
     try {
-      return await fn();
+      // Wrap the function call in a hard timeout
+      return await requestWithTimeout(fn(), 20000);
     } catch (error) {
       lastError = error;
       const status = error.status;
