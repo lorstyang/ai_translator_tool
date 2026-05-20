@@ -787,79 +787,81 @@ export default function App() {
 
         {/* --- 4. SETTINGS TAB VIEW --- */}
         {activeTab === 'settings' && (
-          <form onSubmit={handleSaveSettings} className="flex-1 flex flex-col p-4 overflow-y-auto space-y-4">
-            <div className="space-y-1.5 border-b border-slate-900 pb-3">
-              <h2 className="text-xs font-semibold text-slate-200 flex items-center space-x-1.5">
-                <Settings className="w-4 h-4 text-indigo-400" />
-                <span>API 服务配置</span>
-              </h2>
-              <p className="text-[10px] text-slate-500 leading-normal">
-                配置您本地的 OpenAI 或兼容的中转 API 密钥及节点。
-              </p>
-            </div>
+          <form onSubmit={handleSaveSettings} className="flex-1 flex flex-col p-3.5 overflow-hidden h-full">
+            {/* Scrollable Form Fields */}
+            <div className="flex-1 overflow-y-auto space-y-3.5 pr-1.5 min-h-0 flex flex-col">
+              <div className="space-y-1 border-b border-slate-900 pb-2 shrink-0">
+                <h2 className="text-xs font-semibold text-slate-200 flex items-center space-x-1.5">
+                  <Settings className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>API 服务配置</span>
+                </h2>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  配置您本地的 OpenAI 或兼容的中转 API 密钥及节点。
+                </p>
+              </div>
 
-            {/* API Key */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400">OpenAI API Key</label>
-              <div className="relative">
+              {/* API Key */}
+              <div className="space-y-1 shrink-0">
+                <label className="text-[10px] font-bold text-slate-400">OpenAI API Key</label>
+                <div className="relative">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={settings.apiKey}
+                    onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
+                    placeholder="sk-proj-..."
+                    className="glass-input w-full rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono pr-8"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-2.5 top-2 text-slate-500 hover:text-slate-350"
+                  >
+                    {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Base URL */}
+              <div className="space-y-1 shrink-0">
+                <label className="text-[10px] font-bold text-slate-400">API Base URL</label>
                 <input
-                  type={showApiKey ? "text" : "password"}
-                  value={settings.apiKey}
-                  onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-                  placeholder="sk-proj-..."
-                  className="glass-input w-full rounded-lg px-3 py-2 text-xs focus:outline-none text-slate-100 font-mono pr-8"
+                  type="text"
+                  value={settings.baseUrl}
+                  onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
+                  placeholder="https://api.openai.com/v1"
+                  className="glass-input w-full rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-350"
-                >
-                  {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
+              </div>
+
+              {/* Model Name */}
+              <div className="space-y-1 shrink-0">
+                <label className="text-[10px] font-bold text-slate-400">默认模型型号 (Model)</label>
+                <input
+                  type="text"
+                  value={settings.modelName}
+                  onChange={(e) => setSettings({ ...settings, modelName: e.target.value })}
+                  placeholder="gpt-4o-mini"
+                  className="glass-input w-full rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono"
+                />
+              </div>
+
+              {/* Translate System Prompt */}
+              <div className="flex-1 flex flex-col min-h-[140px] space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 shrink-0">翻译 System Prompt (前置提示词)</label>
+                <textarea
+                  value={settings.translatePrompt}
+                  onChange={(e) => setSettings({ ...settings, translatePrompt: e.target.value })}
+                  placeholder="请输入自定义翻译前置提示词..."
+                  className="glass-input w-full flex-1 rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono resize-none min-h-[80px]"
+                />
+                <p className="text-[9px] text-slate-500 leading-normal shrink-0">
+                  提示：请确保提示词指示 AI 输出的格式包含【台湾繁体】与【English】关键字，程序才能正确截取并分割成两栏。
+                </p>
               </div>
             </div>
 
-            {/* Base URL */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400">API Base URL</label>
-              <input
-                type="text"
-                value={settings.baseUrl}
-                onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
-                placeholder="https://api.openai.com/v1"
-                className="glass-input w-full rounded-lg px-3 py-2 text-xs focus:outline-none text-slate-100 font-mono"
-              />
-            </div>
-
-            {/* Model Name */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400">默认模型型号 (Model)</label>
-              <input
-                type="text"
-                value={settings.modelName}
-                onChange={(e) => setSettings({ ...settings, modelName: e.target.value })}
-                placeholder="gpt-4o-mini"
-                className="glass-input w-full rounded-lg px-3 py-2 text-xs focus:outline-none text-slate-100 font-mono"
-              />
-            </div>
-
-            {/* Translate System Prompt */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400">翻译 System Prompt (前置提示词)</label>
-              <textarea
-                rows={6}
-                value={settings.translatePrompt}
-                onChange={(e) => setSettings({ ...settings, translatePrompt: e.target.value })}
-                placeholder="请输入自定义翻译前置提示词..."
-                className="glass-input w-full rounded-lg px-3 py-2 text-xs focus:outline-none text-slate-100 font-mono resize-y"
-              />
-              <p className="text-[9px] text-slate-500 leading-relaxed">
-                提示：请确保提示词指示 AI 输出的格式包含【台湾繁体】与【English】关键字，程序才能正确截取并分割成两栏。
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-2 flex flex-col space-y-2 shrink-0">
+            {/* Actions (Fixed at Bottom) */}
+            <div className="shrink-0 pt-2.5 border-t border-slate-900 mt-2">
               <button
                 type="submit"
                 className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg text-xs shadow-lg transition-all active:scale-[0.98]"
@@ -868,7 +870,7 @@ export default function App() {
               </button>
               
               {settingsSaved && (
-                <p className="text-[10px] text-center text-emerald-400 font-medium animate-pulse">
+                <p className="text-[10px] text-center text-emerald-400 font-medium mt-1.5 animate-pulse">
                   ✓ 设置已成功保存，并在本地持久化。
                 </p>
               )}
