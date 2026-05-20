@@ -44,12 +44,41 @@ function writeHistory(history) {
   }
 }
 
+const DEFAULT_PROMPT = `你是专业客服翻译助手。
+请把用户输入内容：
+1. 转换成台湾客服常用繁体中文口吻
+2. 翻译成自然英文客服口吻
+
+要求：
+* 语气礼貌
+* 自然
+* 不要机器翻译感
+* 保留原意
+* 符合电商/客服聊天场景
+
+输出格式必须严格为以下，不要有其他解释性文字：
+【台湾繁体】
+[台湾客服风格的繁体中文翻译]
+
+【English】
+[自然的英文客服口吻翻译]`;
+
 // Utility to read settings
 function readSettings() {
   try {
     if (fs.existsSync(settingsFilePath)) {
       const data = fs.readFileSync(settingsFilePath, 'utf-8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      return {
+        width: parsed.width || 380,
+        height: parsed.height || 580,
+        x: parsed.x,
+        y: parsed.y,
+        apiKey: parsed.apiKey || '',
+        baseUrl: parsed.baseUrl || 'https://api.openai.com/v1',
+        modelName: parsed.modelName || 'gpt-4o-mini',
+        translatePrompt: parsed.translatePrompt || DEFAULT_PROMPT
+      };
     }
   } catch (error) {
     console.error('Error reading settings file:', error);
@@ -58,7 +87,8 @@ function readSettings() {
     width: 380, 
     height: 580,
     baseUrl: 'https://api.openai.com/v1',
-    modelName: 'gpt-4o-mini'
+    modelName: 'gpt-4o-mini',
+    translatePrompt: DEFAULT_PROMPT
   };
 }
 

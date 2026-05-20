@@ -32,7 +32,8 @@ export default function App() {
   const [settings, setSettings] = useState({
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
-    modelName: 'gpt-4o-mini'
+    modelName: 'gpt-4o-mini',
+    translatePrompt: ''
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -81,7 +82,8 @@ export default function App() {
             setSettings({
               apiKey: savedSettings.apiKey || '',
               baseUrl: savedSettings.baseUrl || 'https://api.openai.com/v1',
-              modelName: savedSettings.modelName || 'gpt-4o-mini'
+              modelName: savedSettings.modelName || 'gpt-4o-mini',
+              translatePrompt: savedSettings.translatePrompt || ''
             });
           }
         })
@@ -839,6 +841,21 @@ export default function App() {
                 placeholder="gpt-4o-mini"
                 className="glass-input w-full rounded-lg px-3 py-2 text-xs focus:outline-none text-slate-100 font-mono"
               />
+            </div>
+
+            {/* Translate System Prompt */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400">翻译 System Prompt (前置提示词)</label>
+              <textarea
+                rows={6}
+                value={settings.translatePrompt}
+                onChange={(e) => setSettings({ ...settings, translatePrompt: e.target.value })}
+                placeholder="请输入自定义翻译前置提示词..."
+                className="glass-input w-full rounded-lg px-3 py-2 text-xs focus:outline-none text-slate-100 font-mono resize-y"
+              />
+              <p className="text-[9px] text-slate-500 leading-relaxed">
+                提示：请确保提示词指示 AI 输出的格式包含【台湾繁体】与【English】关键字，程序才能正确截取并分割成两栏。
+              </p>
             </div>
 
             {/* Actions */}

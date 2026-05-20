@@ -45,20 +45,7 @@ async function requestWithRetry(fn, retries = 2) {
   throw lastError;
 }
 
-/**
- * Translates customer service messages into Taiwan customer style traditional Chinese and natural English.
- */
-async function translateCustomerMessage(text, config = {}) {
-  const client = await getOpenAIClient(config);
-  const model = config.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-
-  return requestWithRetry(async () => {
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content: `你是专业客服翻译助手。
+const DEFAULT_TRANSLATE_PROMPT = `你是专业客服翻译助手。
 请把用户输入内容：
 1. 转换成台湾客服常用繁体中文口吻
 2. 翻译成自然英文客服口吻
@@ -75,7 +62,23 @@ async function translateCustomerMessage(text, config = {}) {
 [台湾客服风格的繁体中文翻译]
 
 【English】
-[自然的英文客服口吻翻译]`
+[自然的英文客服口吻翻译]`;
+
+/**
+ * Translates customer service messages into Taiwan customer style traditional Chinese and natural English.
+ */
+async function translateCustomerMessage(text, config = {}) {
+  const client = await getOpenAIClient(config);
+  const model = config.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const systemPrompt = config.translatePrompt || DEFAULT_TRANSLATE_PROMPT;
+
+  return requestWithRetry(async () => {
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt
         },
         {
           role: 'user',
