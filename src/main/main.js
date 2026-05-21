@@ -85,7 +85,10 @@ function writeMemo(memos) {
 function readHistory() {
   try {
     if (fs.existsSync(historyFilePath)) {
-      const data = fs.readFileSync(historyFilePath, 'utf-8');
+      const data = fs.readFileSync(historyFilePath, 'utf-8').trim();
+      if (!data) {
+        return { translations: [], chats: [] };
+      }
       const parsed = JSON.parse(data);
       return {
         translations: parsed.translations || [],
@@ -134,7 +137,17 @@ const DEFAULT_PROMPT = `你是专业客服翻译助手。
 function readSettings() {
   try {
     if (fs.existsSync(settingsFilePath)) {
-      const data = fs.readFileSync(settingsFilePath, 'utf-8');
+      const data = fs.readFileSync(settingsFilePath, 'utf-8').trim();
+      if (!data) {
+        return { 
+          width: 380, 
+          height: 580,
+          baseUrl: 'https://api.openai.com/v1',
+          modelName: 'gpt-4o-mini',
+          translatePrompt: DEFAULT_PROMPT,
+          proxyUrl: 'http://127.0.0.1:7890'
+        };
+      }
       const parsed = JSON.parse(data);
       let width = parsed.width;
       let height = parsed.height;
