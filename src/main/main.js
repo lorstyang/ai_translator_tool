@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -10,9 +10,73 @@ const isDev = process.env.NODE_ENV === 'development';
 let mainWindow = null;
 const historyFilePath = path.join(app.getPath('userData'), 'history.json');
 const settingsFilePath = path.join(app.getPath('userData'), 'settings.json');
+const memoFilePath = path.join(app.getPath('userData'), 'memo.txt');
 
 // Import OpenAI service helpers
 const { translateCustomerMessage, normalChat } = require('./services/openai');
+
+// Utility to recursively calculate folder size
+function getFolderSize(dirPath) {
+  let size = 0;
+  try {
+    if (fs.existsSync(dirPath)) {
+      const files = fs.readdirSync(dirPath);
+      for (const file of files) {
+        const filePath = path.join(dirPath, file);
+        const stats = fs.statSync(filePath);
+        if (stats.isFile()) {
+          size += stats.size;
+        } else if (stats.isDirectory()) {
+          size += getFolderSize(filePath);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error calculating folder size:', error);
+  }
+  return size;
+}
+
+// Utility to format bytes into readable string
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Utility to read memo
+function readMemo() {
+  try {
+    if (fs.existsSync(memoFilePath)) {
+      const content = fs.readFileSync(memoFilePath, 'utf-8').trim();
+      if (content.startsWith('[')) {
+        return JSON.parse(content);
+      } else if (content) {
+        // Migration: convert legacy single-string memo to a list-based item
+        return [{
+          id: Date.now(),
+          text: content,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }];
+      }
+    }
+  } catch (error) {
+    console.error('Error reading memo file:', error);
+  }
+  return [];
+}
+
+// Utility to write memo
+function writeMemo(memos) {
+  try {
+    const list = Array.isArray(memos) ? memos : [];
+    fs.writeFileSync(memoFilePath, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Error writing memo file:', error);
+  }
+}
 
 // Utility to read history
 function readHistory() {
@@ -127,6 +191,9 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+
+  // Enforce proportional resizing (380x580 aspect ratio)
+  mainWindow.setAspectRatio(380 / 580);
 
   // Load app
   if (isDev) {
@@ -264,4 +331,29 @@ ipcMain.handle('normal-chat', async (event, messages) => {
     }
     return { success: false, error: errorMsg };
   }
+});
+
+// IPC: Storage, Directory Diagnostics and Memo management
+ipcMain.handle('get-db-info', async () => {
+  const userDataPath = app.getPath('userData');
+  const sizeBytes = getFolderSize(userDataPath);
+  return {
+    path: userDataPath,
+    size: formatBytes(sizeBytes)
+  };
+});
+
+ipcMain.handle('open-db-folder', async () => {
+  const userDataPath = app.getPath('userData');
+  await shell.openPath(userDataPath);
+  return true;
+});
+
+ipcMain.handle('get-memo', async () => {
+  return readMemo();
+});
+
+ipcMain.handle('save-memo', async (event, text) => {
+  writeMemo(text);
+  return true;
 });

@@ -18,15 +18,32 @@ import {
   Settings,
   Eye,
   EyeOff,
-  ChevronRight
+  ChevronRight,
+  StickyNote,
+  Database,
+  FolderOpen,
+  Plus
 } from 'lucide-react';
 
 export default function App() {
   // Navigation State
-  const [activeTab, setActiveTab] = useState('translate'); // 'translate' | 'chat' | 'history' | 'settings'
+  const [activeTab, setActiveTab] = useState('translate'); // 'translate' | 'chat' | 'memo' | 'history' | 'settings'
 
   // Window pin status
   const [isPinned, setIsPinned] = useState(true);
+
+  // Memo State
+  const [memos, setMemos] = useState([]);
+  const [memoSaveStatus, setMemoSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'error'
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [newMemoText, setNewMemoText] = useState('');
+  const [editingMemoId, setEditingMemoId] = useState(null);
+  const [editingMemoText, setEditingMemoText] = useState('');
+  const [copiedMemoId, setCopiedMemoId] = useState(null);
+  const isSavingRef = useRef(false);
+
+  // Local storage diagnostic state
+  const [dbInfo, setDbInfo] = useState({ path: '', size: '' });
 
   // Global settings state
   const [settings, setSettings] = useState({
@@ -66,6 +83,7 @@ export default function App() {
   const [chatError, setChatError] = useState('');
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const chatBottomRef = useRef(null);
+  const chatInputRef = useRef(null);
 
   // Initialize data on mount
   useEffect(() => {
@@ -103,6 +121,17 @@ export default function App() {
         })
         .catch(console.error);
 
+      // Load Memo
+      window.api.storage.getMemo()
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setMemos(data);
+          } else {
+            setMemos([]);
+          }
+        })
+        .catch(console.error);
+
       return () => unsubscribe();
     }
   }, []);
@@ -113,6 +142,169 @@ export default function App() {
       chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages]);
+
+  // Load DB Info whenever Settings tab gets focused
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      loadDbInfo();
+    }
+  }, [activeTab]);
+
+  // Auto-focus input fields when switching to Translate or Chat tabs
+  useEffect(() => {
+    if (activeTab === 'translate') {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    } else if (activeTab === 'chat') {
+      setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 50);
+    }
+  }, [activeTab]);
+
+  const saveMemosToStorage = (updatedMemos) => {
+    if (window.api && window.api.storage) {
+      setMemoSaveStatus('saving');
+      window.api.storage.saveMemo(updatedMemos)
+        .then(() => setMemoSaveStatus('saved'))
+        .catch((err) => {
+          console.error(err);
+          setMemoSaveStatus('error');
+        });
+    }
+  };
+
+  const handleSaveNewMemo = (textToSave = newMemoText) => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+
+    const trimmed = textToSave.trim();
+    if (!trimmed) {
+      setIsAddingNew(false);
+      setNewMemoText('');
+      isSavingRef.current = false;
+      return;
+    }
+
+    const newMemo = {
+      id: Date.now(),
+      text: trimmed,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    const updatedMemos = [newMemo, ...memos];
+    setMemos(updatedMemos);
+    saveMemosToStorage(updatedMemos);
+
+    setIsAddingNew(false);
+    setNewMemoText('');
+
+    setTimeout(() => {
+      isSavingRef.current = false;
+    }, 50);
+  };
+
+  const handleNewMemoBlur = () => {
+    handleSaveNewMemo();
+  };
+
+  const handleStartEdit = (memo) => {
+    // First, save any other active inputs
+    if (isAddingNew) {
+      handleSaveNewMemo();
+    }
+    if (editingMemoId !== null && editingMemoId !== memo.id) {
+      handleSaveEditMemo(editingMemoId);
+    }
+
+    setEditingMemoId(memo.id);
+    setEditingMemoText(memo.text);
+  };
+
+  const handleSaveEditMemo = (id, textToSave = editingMemoText) => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+
+    const trimmed = textToSave.trim();
+    if (!trimmed) {
+      handleDeleteMemo(id);
+      setTimeout(() => {
+        isSavingRef.current = false;
+      }, 50);
+      return;
+    }
+
+    const updatedMemos = memos.map(m => {
+      if (m.id === id) {
+        return { ...m, text: trimmed };
+      }
+      return m;
+    });
+
+    setMemos(updatedMemos);
+    saveMemosToStorage(updatedMemos);
+    setEditingMemoId(null);
+    setEditingMemoText('');
+
+    setTimeout(() => {
+      isSavingRef.current = false;
+    }, 50);
+  };
+
+  const handleEditMemoBlur = (id) => {
+    handleSaveEditMemo(id);
+  };
+
+  const handleDeleteMemo = (id) => {
+    const updatedMemos = memos.filter(m => m.id !== id);
+    setMemos(updatedMemos);
+    saveMemosToStorage(updatedMemos);
+    if (editingMemoId === id) {
+      setEditingMemoId(null);
+      setEditingMemoText('');
+    }
+  };
+
+  const handleCopyMemo = async (id, text) => {
+    if (!text) return;
+    try {
+      if (window.api) {
+        await window.api.clipboard.copyText(text);
+        setCopiedMemoId(id);
+        setTimeout(() => setCopiedMemoId(null), 2000);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleMemoKeyDown = (e, isNew, id) => {
+    if (e.key === 'Enter') {
+      if (!e.shiftKey) {
+        e.preventDefault();
+        if (isNew) {
+          handleSaveNewMemo();
+        } else {
+          handleSaveEditMemo(id);
+        }
+      }
+    }
+  };
+
+  const loadDbInfo = () => {
+    if (window.api && window.api.storage) {
+      window.api.storage.getDbInfo()
+        .then(info => setDbInfo(info))
+        .catch(console.error);
+    }
+  };
+
+  const handleOpenDbFolder = () => {
+    if (window.api && window.api.storage) {
+      window.api.storage.openDbFolder();
+    }
+  };
 
   // Window actions
   const handleMinimize = () => window.api?.windowControls.minimize();
@@ -407,6 +599,18 @@ export default function App() {
           <MessageSquare className="w-3.5 h-3.5 shrink-0" />
           <span>提问</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('memo')}
+          className={`flex-1 py-1.5 rounded-md flex items-center justify-center space-x-1 transition-all ${
+            activeTab === 'memo' 
+              ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 shadow-inner' 
+              : 'hover:bg-slate-800/40 hover:text-slate-200 border border-transparent'
+          }`}
+        >
+          <StickyNote className="w-3.5 h-3.5 shrink-0" />
+          <span>备忘</span>
+        </button>
         
         <button
           onClick={() => setActiveTab('history')}
@@ -503,14 +707,14 @@ export default function App() {
                   {taiwanOutput && (
                     <button
                       onClick={() => copyToClipboard(taiwanOutput, 'tw')}
-                      className={`text-[9px] flex items-center space-x-1 px-1.5 py-0.5 rounded transition-all duration-150 ${
+                      className={`p-1.5 rounded-lg transition-all duration-150 ${
                         copiedTw 
-                          ? 'text-emerald-400 bg-emerald-500/10' 
+                          ? 'text-emerald-400 bg-emerald-500/10 scale-105' 
                           : 'text-indigo-400 hover:bg-indigo-500/10 hover:text-indigo-300'
                       }`}
+                      title={copiedTw ? "已复制" : "复制繁体"}
                     >
-                      {copiedTw ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
-                      <span>{copiedTw ? '已复制' : '复制繁体'}</span>
+                      {copiedTw ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </button>
                   )}
                 </div>
@@ -532,14 +736,14 @@ export default function App() {
                   {englishOutput && (
                     <button
                       onClick={() => copyToClipboard(englishOutput, 'en')}
-                      className={`text-[9px] flex items-center space-x-1 px-1.5 py-0.5 rounded transition-all duration-150 ${
+                      className={`p-1.5 rounded-lg transition-all duration-150 ${
                         copiedEn 
-                          ? 'text-emerald-400 bg-emerald-500/10' 
+                          ? 'text-emerald-400 bg-emerald-500/10 scale-105' 
                           : 'text-indigo-400 hover:bg-indigo-500/10 hover:text-indigo-300'
                       }`}
+                      title={copiedEn ? "已复制" : "复制英文"}
                     >
-                      {copiedEn ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
-                      <span>{copiedEn ? '已复制' : '复制英文'}</span>
+                      {copiedEn ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </button>
                   )}
                 </div>
@@ -646,12 +850,13 @@ export default function App() {
             {/* Bottom Input Area */}
             <div className="shrink-0 pt-2 border-t border-slate-900/60 flex items-end space-x-2">
               <textarea
+                ref={chatInputRef}
                 rows={1}
                 value={chatInputText}
                 onChange={(e) => setChatInputText(e.target.value)}
                 onKeyDown={handleChatKeyDown}
                 placeholder="发送给 AI (Enter 发送，Shift+Enter 换行)..."
-                className="glass-input flex-1 rounded-lg px-3 py-2 text-xs focus:outline-none placeholder:text-slate-600 text-slate-100 leading-relaxed font-sans max-h-20 resize-none"
+                className="glass-input flex-1 rounded-lg px-3 py-2 text-xs focus:outline-none placeholder:text-slate-650 text-slate-100 leading-relaxed font-sans max-h-20 resize-none"
               />
               <button
                 onClick={handleSendChatMessage}
@@ -880,6 +1085,36 @@ export default function App() {
                   提示：请确保提示词指示 AI 输出的格式包含【台湾繁体】与【English】关键字，程序才能正确截取并分割成两栏。
                 </p>
               </div>
+
+              {/* Local Storage & Diagnostics Section */}
+              <div className="space-y-2 pt-3 border-t border-slate-900 shrink-0">
+                <h2 className="text-xs font-semibold text-slate-200 flex items-center space-x-1.5">
+                  <Database className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>本地存储与诊断</span>
+                </h2>
+                <div className="bg-slate-900/40 rounded-lg p-2.5 border border-slate-800/60 space-y-2">
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-[9px] font-bold text-slate-400">数据文件夹路径</span>
+                    <span className="text-[10px] text-slate-350 font-mono break-all bg-slate-950/40 p-1.5 rounded border border-slate-900/60 select-text">
+                      {dbInfo.path || '正在读取...'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-bold text-slate-400">文件夹大小</span>
+                      <span className="text-xs font-medium text-slate-200">{dbInfo.size || '正在计算...'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleOpenDbFolder}
+                      className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 transition-colors flex items-center space-x-1"
+                    >
+                      <FolderOpen className="w-3 h-3" />
+                      <span>打开文件夹</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Actions (Fixed at Bottom) */}
@@ -898,6 +1133,251 @@ export default function App() {
               )}
             </div>
           </form>
+        )}
+
+        {/* --- 5. MEMO TAB VIEW --- */}
+        {activeTab === 'memo' && (
+          <div className="flex-1 flex flex-col p-3.5 space-y-2.5 overflow-hidden h-full">
+            {/* Header section */}
+            <div className="flex items-center justify-between border-b border-slate-900 pb-2.5 shrink-0">
+              <div className="flex items-center space-x-1.5">
+                <StickyNote className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                <h2 className="text-xs font-semibold text-slate-200">
+                  工作备忘录
+                </h2>
+                <span className="text-[10px] text-slate-500 font-mono mt-0.5">
+                  ({memos.length})
+                </span>
+              </div>
+              
+              {/* Status Indicator */}
+              <div className="flex items-center">
+                {memoSaveStatus === 'saving' && (
+                  <span className="text-[9.5px] text-slate-500 flex items-center space-x-1 font-sans">
+                    <Loader2 className="w-2.5 h-2.5 animate-spin text-indigo-400" />
+                    <span>正在保存...</span>
+                  </span>
+                )}
+                {memoSaveStatus === 'saved' && (
+                  <span className="text-[9.5px] text-emerald-400 flex items-center space-x-1 font-sans">
+                    <Check className="w-2.5 h-2.5" />
+                    <span>已存盘</span>
+                  </span>
+                )}
+                {memoSaveStatus === 'error' && (
+                  <span className="text-[9.5px] text-red-400 flex items-center space-x-1 font-sans">
+                    <AlertCircle className="w-2.5 h-2.5" />
+                    <span>保存失败</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Scrollable Container */}
+            <div className="flex-1 overflow-y-auto pr-0.5 space-y-2.5 min-h-0">
+              {/* Add New Memo Panel or Centered Plus Button */}
+              {isAddingNew ? (
+                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-indigo-500/20 shadow-md animate-fadeIn flex flex-col space-y-2">
+                  <textarea
+                    autoFocus
+                    rows={3}
+                    value={newMemoText}
+                    onChange={(e) => setNewMemoText(e.target.value)}
+                    onKeyDown={(e) => handleMemoKeyDown(e, true)}
+                    onBlur={handleNewMemoBlur}
+                    placeholder="在此输入新备忘内容，按 Enter 保存，Shift+Enter 换行..."
+                    className="glass-input w-full rounded-lg p-2.5 text-xs focus:outline-none placeholder:text-slate-500 text-slate-100 leading-relaxed font-sans resize-none bg-slate-950/40 border border-slate-800/40 focus:border-indigo-500/30"
+                  />
+                  <div className="flex items-center justify-between pt-0.5">
+                    <span className="text-[9px] text-slate-500 font-mono">
+                      {newMemoText.length} 字
+                    </span>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setIsAddingNew(false);
+                          setNewMemoText('');
+                        }}
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-slate-200 transition-colors text-[10px] font-medium"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleSaveNewMemo();
+                        }}
+                        className="px-2.5 py-1 rounded bg-indigo-650/80 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-650/15 transition-all text-[10px] font-medium"
+                      >
+                        保存
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (editingMemoId !== null) {
+                      handleSaveEditMemo(editingMemoId);
+                    }
+                    setIsAddingNew(true);
+                    setNewMemoText('');
+                  }}
+                  className="w-full py-3.5 rounded-xl border border-dashed border-slate-800 hover:border-indigo-500/30 bg-slate-900/10 hover:bg-indigo-600/5 text-slate-500 hover:text-indigo-400 flex items-center justify-center transition-all duration-200 shrink-0"
+                  title="新增备忘"
+                >
+                  <Plus className="w-4 h-4 text-slate-450 hover:text-indigo-400 transition-colors" />
+                </button>
+              )}
+
+              {/* Memos List */}
+              {memos.length === 0 ? (
+                !isAddingNew && (
+                  <div className="flex flex-col items-center justify-center text-center p-8 text-slate-500 space-y-2.5 mt-8">
+                    <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center border border-slate-800">
+                      <StickyNote className="w-5 h-5 text-indigo-400/80" />
+                    </div>
+                    <h3 className="text-xs font-semibold text-slate-300">暂无工作备忘</h3>
+                    <p className="text-[10px] leading-relaxed max-w-[200px]">
+                      点击上方的“+”号按钮，记录您的日常备忘、常用快捷回复或工作记录。
+                    </p>
+                  </div>
+                )
+              ) : (
+                memos.map((memo) => {
+                  const isEditing = editingMemoId === memo.id;
+                  return (
+                    <div
+                      key={memo.id}
+                      className={`group rounded-xl border transition-all duration-200 ${
+                        isEditing
+                          ? 'bg-slate-900/60 border-indigo-500/20 shadow-md p-3.5 space-y-2'
+                          : 'bg-slate-900/30 hover:bg-slate-900/50 border-slate-900 hover:border-slate-850 py-2.5 px-3 flex flex-col justify-center cursor-pointer relative overflow-hidden'
+                      }`}
+                      onClick={() => {
+                        if (!isEditing) {
+                          handleStartEdit(memo);
+                        }
+                      }}
+                    >
+                      {isEditing ? (
+                        /* Expanded Editing View */
+                        <>
+                          <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono select-none">
+                            <span>编辑于 {memo.timestamp}</span>
+                            <span className="text-slate-600 font-mono">{editingMemoText.length} 字</span>
+                          </div>
+                          
+                          <textarea
+                            autoFocus
+                            rows={3}
+                            value={editingMemoText}
+                            onChange={(e) => setEditingMemoText(e.target.value)}
+                            onKeyDown={(e) => handleMemoKeyDown(e, false, memo.id)}
+                            onBlur={() => handleEditMemoBlur(memo.id)}
+                            placeholder="在此输入备忘内容，按 Enter 保存，Shift+Enter 换行..."
+                            className="glass-input w-full rounded-lg p-2.5 text-xs focus:outline-none placeholder:text-slate-500 text-slate-100 leading-relaxed font-sans resize-none bg-slate-950/40 border border-slate-800/40 focus:border-indigo-500/30"
+                          />
+                          
+                          <div className="flex items-center justify-between pt-0.5">
+                            <div className="flex items-center space-x-1">
+                              <button
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleCopyMemo(memo.id, editingMemoText);
+                                }}
+                                className={`p-1.5 rounded-lg transition-all duration-150 ${
+                                  copiedMemoId === memo.id
+                                    ? 'text-emerald-400 bg-emerald-500/10 scale-105'
+                                    : 'text-slate-400 hover:bg-indigo-500/10 hover:text-indigo-300'
+                                }`}
+                                title={copiedMemoId === memo.id ? "已复制" : "复制"}
+                              >
+                                {copiedMemoId === memo.id ? (
+                                  <Check className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+
+                              <button
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  if (confirm('确认删除此条备忘吗？')) {
+                                    handleDeleteMemo(memo.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                                title="删除"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <button
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleSaveEditMemo(memo.id);
+                              }}
+                              className="px-2.5 py-1 rounded bg-indigo-650/80 hover:bg-indigo-600 text-white shadow-lg transition-all text-[10px] font-medium"
+                            >
+                              保存
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        /* Collapsed Preview View */
+                        <>
+                          <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mb-1 select-none">
+                            <span>{memo.timestamp}</span>
+                            <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1.5 transition-all duration-150">
+                              <button
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  handleCopyMemo(memo.id, memo.text);
+                                }}
+                                className={`p-1 rounded transition-colors duration-150 ${
+                                  copiedMemoId === memo.id
+                                    ? 'text-emerald-400'
+                                    : 'text-slate-400 hover:text-indigo-300'
+                                }`}
+                                title="复制"
+                              >
+                                {copiedMemoId === memo.id ? (
+                                  <Check className="w-3 h-3" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                              <button
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  if (confirm('确认删除此条备忘吗？')) {
+                                    handleDeleteMemo(memo.id);
+                                  }
+                                }}
+                                className="p-1 rounded text-slate-400 hover:text-red-400 transition-colors duration-150"
+                                title="删除"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <p className="text-xs text-slate-200 truncate select-none leading-relaxed font-sans pr-4 font-medium">
+                            {memo.text}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         )}
 
       </div>
