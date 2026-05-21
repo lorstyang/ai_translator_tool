@@ -10,6 +10,7 @@ const isDev = process.env.NODE_ENV === 'development';
 let mainWindow = null;
 let originalBounds = null;
 let isFloatingBall = false;
+let wasAlwaysOnTop = false;
 const historyFilePath = path.join(app.getPath('userData'), 'history.json');
 const settingsFilePath = path.join(app.getPath('userData'), 'settings.json');
 const memoFilePath = path.join(app.getPath('userData'), 'memo.txt');
@@ -286,6 +287,7 @@ ipcMain.on('window-control', (event, action, data) => {
     originalBounds = mainWindow.getBounds();
     
     // Save current pin status to always keep floating ball on top
+    wasAlwaysOnTop = mainWindow.isAlwaysOnTop();
     mainWindow.setAlwaysOnTop(true);
     
     // Remove minimum size limits and aspect ratio
@@ -341,6 +343,9 @@ ipcMain.on('window-control', (event, action, data) => {
     mainWindow.setMinimumSize(320, 480);
     mainWindow.setMaximumSize(600, 900);
     mainWindow.setAspectRatio(380 / 580);
+    
+    // Restore original pin status
+    mainWindow.setAlwaysOnTop(wasAlwaysOnTop);
     
     const restoreBounds = {
       x: Math.round(restoreX),
