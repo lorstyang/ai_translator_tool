@@ -7,6 +7,11 @@
     @apply text-slate-200 select-none antialiased;
   }
   
+  /* Disable focus outlines globally to prevent browser outline flash animation */
+  input:focus, textarea:focus, button:focus {
+    outline: none !important;
+  }
+  
   /* Custom scrollbar for webkit */
   ::-webkit-scrollbar {
     width: 6px;
@@ -40,7 +45,7 @@
 .glass-input {
   background: rgba(30, 41, 59, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-input:focus {
