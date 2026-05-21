@@ -198,8 +198,8 @@ function createWindow() {
     x: settings.x,
     y: settings.y,
     minWidth: 320,
-    minHeight: 480,
-    maxWidth: 600,
+    minHeight: 488, // Aligned with 380/580 aspect ratio (320 * 580 / 380 = 488)
+    maxWidth: 590,  // Aligned with 380/580 aspect ratio (900 * 380 / 580 = 590)
     maxHeight: 900,
     frame: false, // Frameless UI
     alwaysOnTop: true, // Always on top
@@ -221,9 +221,9 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     // Force bounds correction if restored size is too small (e.g. from closing in floating ball state)
     const bounds = mainWindow.getBounds();
-    if (bounds.width < 320 || bounds.height < 480) {
+    if (bounds.width < 320 || bounds.height < 488) {
       const targetWidth = Math.max(settings.width || 380, 320);
-      const targetHeight = Math.max(settings.height || 580, 480);
+      const targetHeight = Math.round(targetWidth * (580 / 380));
       mainWindow.setSize(targetWidth, targetHeight);
     }
     mainWindow.show();
@@ -353,8 +353,8 @@ ipcMain.on('window-control', (event, action, data) => {
 
     // Restore size constraints and aspect ratio
     mainWindow.setResizable(true);
-    mainWindow.setMinimumSize(320, 480);
-    mainWindow.setMaximumSize(600, 900);
+    mainWindow.setMinimumSize(320, 488);
+    mainWindow.setMaximumSize(590, 900);
     mainWindow.setAspectRatio(380 / 580);
     
     // Restore original pin status
