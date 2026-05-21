@@ -22,12 +22,89 @@ import {
   StickyNote,
   Database,
   FolderOpen,
-  Plus
+  Plus,
+  Minimize2,
+  Languages
 } from 'lucide-react';
 
 export default function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState('translate'); // 'translate' | 'chat' | 'memo' | 'history' | 'settings'
+
+  // Floating Ball / uTools style mini icon mode
+  const [isFloating, setIsFloating] = useState(false);
+  const [isVisualFloating, setIsVisualFloating] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const hasMovedRef = useRef(false);
+  const isRestoringRef = useRef(false);
+
+  const handleBallPointerDown = (e) => {
+    if (e.button !== 0 || isRestoringRef.current) return;
+    isDraggingRef.current = true;
+    hasMovedRef.current = false;
+    dragStartRef.current = { x: e.screenX, y: e.screenY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+
+  const handleBallPointerMove = (e) => {
+    if (!isDraggingRef.current || isRestoringRef.current) return;
+    const dx = e.screenX - dragStartRef.current.x;
+    const dy = e.screenY - dragStartRef.current.y;
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+      hasMovedRef.current = true;
+    }
+    if (dx !== 0 || dy !== 0) {
+      window.api?.windowControls.moveWindow(dx, dy);
+      dragStartRef.current = { x: e.screenX, y: e.screenY };
+    }
+  };
+
+  const handleBallPointerUp = (e) => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    if (!hasMovedRef.current && !isRestoringRef.current) {
+      handleRestore();
+    }
+  };
+
+  const handleShrink = () => {
+    if (isFloating || isVisualFloating) return;
+    setIsVisualFloating(true);
+    setTimeout(() => {
+      setIsFloating(true);
+      window.api?.windowControls.shrinkToIcon();
+    }, 40);
+  };
+
+  const handleRestore = () => {
+    if (isRestoringRef.current) return;
+    isRestoringRef.current = true;
+    window.api?.windowControls.restoreFromIcon();
+    setIsFloating(false);
+    setTimeout(() => {
+      setIsVisualFloating(false);
+      isRestoringRef.current = false;
+      
+      // Auto-focus input fields when restoring normal window
+      const focusInput = () => {
+        if (activeTab === 'translate') {
+          inputRef.current?.focus();
+        } else if (activeTab === 'chat') {
+          chatInputRef.current?.focus();
+        }
+      };
+
+      focusInput();
+      // Retry at different stages of window layout stabilization to ensure focus succeeds
+      setTimeout(focusInput, 50);
+      setTimeout(focusInput, 150);
+      setTimeout(focusInput, 300);
+      setTimeout(focusInput, 500);
+    }, 100);
+  };
 
   // Window pin status
   const [isPinned, setIsPinned] = useState(true);
@@ -537,10 +614,34 @@ export default function App() {
   };
 
   return (
-    <div className="glass-panel w-screen h-screen rounded-2xl overflow-hidden flex flex-col shadow-2xl text-slate-100 border border-slate-800">
-      
-      {/* Frameless Top Drag Bar */}
-      <header className="drag-area h-10 shrink-0 bg-slate-950/60 flex items-center justify-between px-4 border-b border-slate-900/40">
+    <div
+      onPointerDown={isFloating ? handleBallPointerDown : undefined}
+      onPointerMove={isFloating ? handleBallPointerMove : undefined}
+      onPointerUp={isFloating ? handleBallPointerUp : undefined}
+      title={isFloating ? "拖拽移动，点击恢复窗口" : undefined}
+      className={`w-screen h-screen overflow-hidden select-none relative bg-[#0f172a] border-none shadow-none
+        ${isFloating ? "cursor-move flex items-center justify-center" : "cursor-default"}`}
+    >
+      {/* Mini floating ball content */}
+      <div 
+        className={`absolute top-1.5 right-1.5 w-[48px] h-[48px] flex items-center justify-center transition-all duration-75 rounded-full bg-slate-950 border border-indigo-500/40
+          ${isFloating 
+            ? "shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_22px_rgba(99,102,241,0.6)] active:scale-95 pointer-events-auto" 
+            : "shadow-lg pointer-events-none"
+          }
+          ${isVisualFloating ? "opacity-100 scale-100" : "opacity-0 scale-75"}`}
+      >
+        <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-purple-500/10 animate-pulse rounded-full" />
+        <Sparkles className="w-6 h-6 text-indigo-400 filter drop-shadow-[0_0_8px_rgba(99,102,241,0.5)] animate-pulse" />
+      </div>
+
+      {/* Main UI Content */}
+      <div 
+        className={`w-full h-full glass-panel rounded-2xl border border-slate-800 flex flex-col transition-all duration-75 origin-top-right
+          ${isVisualFloating ? "opacity-0 scale-90 pointer-events-none" : "opacity-100 scale-100"}`}
+      >
+        {/* Frameless Top Drag Bar */}
+        <header className={`${isFloating ? "no-drag-area" : "drag-area"} h-10 shrink-0 bg-slate-950/60 flex items-center justify-between px-4 border-b border-slate-900/40`}>
         <div className="flex items-center space-x-2">
           <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
           <span className="text-[10px] font-bold tracking-wider bg-gradient-to-r from-indigo-300 to-purple-400 bg-clip-text text-transparent uppercase">
@@ -550,6 +651,13 @@ export default function App() {
         
         {/* Window controls */}
         <div className="no-drag-area flex items-center space-x-1">
+          <button 
+            onClick={handleShrink} 
+            title="迷你悬浮球"
+            className="p-1 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-indigo-400 transition-colors duration-150"
+          >
+            <Minimize2 className="w-3.5 h-3.5" />
+          </button>
           <button 
             onClick={togglePin} 
             title={isPinned ? "取消置顶" : "置顶悬浮"}
@@ -1380,6 +1488,7 @@ export default function App() {
           </div>
         )}
 
+      </div>
       </div>
     </div>
   );

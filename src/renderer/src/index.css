@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  html, body, #root {
+    background-color: #0f172a;
+    background: #0f172a;
+  }
+
   body {
     @apply text-slate-200 select-none antialiased;
   }

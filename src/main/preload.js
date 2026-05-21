@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  platform: process.platform,
   windowControls: {
     minimize: () => ipcRenderer.send('window-control', 'minimize'),
     close: () => ipcRenderer.send('window-control', 'close'),
@@ -12,7 +13,10 @@ contextBridge.exposeInMainWorld('api', {
       return () => {
         ipcRenderer.removeListener('pin-status-changed', subscription);
       };
-    }
+    },
+    shrinkToIcon: () => ipcRenderer.send('window-control', 'shrink-to-icon'),
+    restoreFromIcon: () => ipcRenderer.send('window-control', 'restore-from-icon'),
+    moveWindow: (dx, dy) => ipcRenderer.send('window-control', 'move-window', { dx, dy })
   },
   clipboard: {
     copyText: (text) => ipcRenderer.invoke('clipboard-copy', text),

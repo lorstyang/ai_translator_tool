@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -8,6 +8,8 @@ require('dotenv').config();
 const isDev = process.env.NODE_ENV === 'development';
 
 let mainWindow = null;
+let originalBounds = null;
+let isFloatingBall = false;
 const historyFilePath = path.join(app.getPath('userData'), 'history.json');
 const settingsFilePath = path.join(app.getPath('userData'), 'settings.json');
 const memoFilePath = path.join(app.getPath('userData'), 'memo.txt');
@@ -133,9 +135,13 @@ function readSettings() {
     if (fs.existsSync(settingsFilePath)) {
       const data = fs.readFileSync(settingsFilePath, 'utf-8');
       const parsed = JSON.parse(data);
+      let width = parsed.width;
+      let height = parsed.height;
+      if (!width || width < 320) width = 380;
+      if (!height || height < 480) height = 580;
       return {
-        width: parsed.width || 380,
-        height: parsed.height || 580,
+        width,
+        height,
         x: parsed.x,
         y: parsed.y,
         apiKey: parsed.apiKey || '',
@@ -183,8 +189,10 @@ function createWindow() {
     maxHeight: 900,
     frame: false, // Frameless UI
     alwaysOnTop: true, // Always on top
-    transparent: true, // Enable window transparency
-    hasShadow: true,
+    transparent: false, // Disable transparency
+    backgroundColor: '#0f172a', // Set window background color matching the app theme
+    hasShadow: true, // Enable native shadow
+    show: false, // Hide initially to prevent white flash
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -195,6 +203,25 @@ function createWindow() {
   // Enforce proportional resizing (380x580 aspect ratio)
   mainWindow.setAspectRatio(380 / 580);
 
+  // Show window only when ready to avoid white flash
+  mainWindow.once('ready-to-show', () => {
+    // Force bounds correction if restored size is too small (e.g. from closing in floating ball state)
+    const bounds = mainWindow.getBounds();
+    if (bounds.width < 320 || bounds.height < 480) {
+      const targetWidth = Math.max(settings.width || 380, 320);
+      const targetHeight = Math.max(settings.height || 580, 480);
+      mainWindow.setSize(targetWidth, targetHeight);
+    }
+    mainWindow.show();
+  });
+
+  // Prevent resizing when in floating ball mode
+  mainWindow.on('will-resize', (event) => {
+    if (isFloatingBall) {
+      event.preventDefault();
+    }
+  });
+
   // Load app
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
@@ -204,7 +231,7 @@ function createWindow() {
 
   // Save window bounds on resize/move finished or window close to optimize drag performance
   const saveBounds = () => {
-    if (!mainWindow) return;
+    if (!mainWindow || isFloatingBall) return;
     const bounds = mainWindow.getBounds();
     writeSettings({
       width: bounds.width,
@@ -241,7 +268,7 @@ app.on('window-all-closed', () => {
 });
 
 // IPC: Window controls
-ipcMain.on('window-control', (event, action) => {
+ipcMain.on('window-control', (event, action, data) => {
   if (!mainWindow) return;
   if (action === 'minimize') {
     mainWindow.minimize();
@@ -253,6 +280,87 @@ ipcMain.on('window-control', (event, action) => {
     event.reply('pin-status-changed', !isAlwaysOnTop);
   } else if (action === 'get-pin-status') {
     event.returnValue = mainWindow.isAlwaysOnTop();
+  } else if (action === 'shrink-to-icon') {
+    if (isFloatingBall) return;
+    isFloatingBall = true;
+    originalBounds = mainWindow.getBounds();
+    
+    // Save current pin status to always keep floating ball on top
+    mainWindow.setAlwaysOnTop(true);
+    
+    // Remove minimum size limits and aspect ratio
+    mainWindow.setMinimumSize(40, 40);
+    mainWindow.setMaximumSize(10000, 10000);
+    mainWindow.setAspectRatio(0);
+    
+    // Disable resizable: Electron docs warn transparent + resizable breaks on macOS
+    mainWindow.setResizable(false);
+    
+    // Position floating ball at top-right of original window
+    const ballSize = 60;
+    const targetBounds = {
+      x: Math.round(originalBounds.x + originalBounds.width - ballSize),
+      y: Math.round(originalBounds.y),
+      width: ballSize,
+      height: ballSize
+    };
+    
+    // Perform animated window resize to floating ball position/size
+    mainWindow.setBounds(targetBounds, true);
+  } else if (action === 'restore-from-icon') {
+    if (!isFloatingBall || !originalBounds) return;
+    isFloatingBall = false;
+    
+    const ballBounds = mainWindow.getBounds();
+    let restoreX = ballBounds.x + ballBounds.width - originalBounds.width;
+    let restoreY = ballBounds.y;
+
+    // If ball is dragged near left edge of screen, expand to the right
+    if (ballBounds.x < 100) {
+      restoreX = ballBounds.x;
+    }
+
+    // Ensure it doesn't go off screen
+    const display = screen.getDisplayMatching(ballBounds);
+    const workArea = display.workArea;
+
+    if (restoreX < workArea.x) {
+      restoreX = workArea.x;
+    } else if (restoreX + originalBounds.width > workArea.x + workArea.width) {
+      restoreX = workArea.x + workArea.width - originalBounds.width;
+    }
+
+    if (restoreY < workArea.y) {
+      restoreY = workArea.y;
+    } else if (restoreY + originalBounds.height > workArea.y + workArea.height) {
+      restoreY = workArea.y + workArea.height - originalBounds.height;
+    }
+
+    // Restore size constraints and aspect ratio
+    mainWindow.setResizable(true);
+    mainWindow.setMinimumSize(320, 480);
+    mainWindow.setMaximumSize(600, 900);
+    mainWindow.setAspectRatio(380 / 580);
+    
+    const restoreBounds = {
+      x: Math.round(restoreX),
+      y: Math.round(restoreY),
+      width: originalBounds.width,
+      height: originalBounds.height
+    };
+    
+    // Perform animated window restore to original bounds
+    mainWindow.setBounds(restoreBounds, true);
+    mainWindow.focus();
+  } else if (action === 'move-window') {
+    if (!data) return;
+    const bounds = mainWindow.getBounds();
+    mainWindow.setBounds({
+      x: Math.round(bounds.x + data.dx),
+      y: Math.round(bounds.y + data.dy),
+      width: bounds.width,
+      height: bounds.height
+    });
   }
 });
 
