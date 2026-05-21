@@ -130,7 +130,7 @@ async function normalChat(messages, config = {}) {
       messages: [
         {
           role: 'system',
-          content: '你是专业客服助手。请使用专业、礼貌、温和的客服语气解答用户问题。'
+          content: ''
         },
         ...messages
       ],
