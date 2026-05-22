@@ -754,20 +754,19 @@ export default function App() {
       onPointerMove={isFloating ? handleBallPointerMove : undefined}
       onPointerUp={isFloating ? handleBallPointerUp : undefined}
       title={isFloating ? "拖拽移动，点击恢复窗口" : undefined}
-      className={`w-screen h-screen overflow-hidden select-none relative bg-[#0f172a] border-none shadow-none
-        ${isFloating ? "cursor-move flex items-center justify-center" : "cursor-default"}`}
+      className={`w-screen h-screen overflow-hidden select-none relative bg-gradient-to-br from-[#0b0f19] via-[#131a35] to-[#251845] transition-all duration-200
+        ${isFloating 
+          ? "cursor-move flex items-center justify-center border border-indigo-500/30 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.25)] hover:shadow-[0_0_22px_rgba(99,102,241,0.5)] hover:border-indigo-400/40 active:scale-95" 
+          : "cursor-default border-none shadow-none"
+        }`}
     >
       {/* Mini floating ball content */}
       <div 
-        className={`absolute top-1.5 right-1.5 w-[48px] h-[48px] flex items-center justify-center transition-all duration-75 rounded-full bg-slate-950 border border-indigo-500/40
-          ${isFloating 
-            ? "shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_22px_rgba(99,102,241,0.6)] active:scale-95 pointer-events-auto" 
-            : "shadow-lg pointer-events-none"
-          }
+        className={`absolute top-1.5 right-1.5 w-[48px] h-[48px] flex items-center justify-center transition-all duration-75 bg-transparent
+          ${isFloating ? "pointer-events-auto" : "pointer-events-none"}
           ${isVisualFloating ? "opacity-100 scale-100" : "opacity-0 scale-75"}`}
       >
-        <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-purple-500/10 animate-pulse rounded-full" />
-        <Sparkles className="w-6 h-6 text-indigo-400 filter drop-shadow-[0_0_8px_rgba(99,102,241,0.5)] animate-pulse" />
+        <Sparkles className="w-6 h-6 text-indigo-300 filter drop-shadow-[0_0_8px_rgba(99,102,241,0.6)] animate-pulse" />
       </div>
 
       {/* Main UI Content */}
