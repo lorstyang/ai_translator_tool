@@ -88,6 +88,10 @@ const DEFAULT_TRANSLATE_PROMPT = `你是专业客服翻译助手。
 【English】
 [自然的英文客服口吻翻译]`;
 
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Translates customer service messages into Taiwan customer style traditional Chinese and natural English.
  */
@@ -95,6 +99,21 @@ async function translateCustomerMessage(text, config = {}) {
   const client = await getOpenAIClient(config);
   const model = config.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
   const systemPrompt = config.translatePrompt || DEFAULT_TRANSLATE_PROMPT;
+
+  // Extract headers dynamically from systemPrompt
+  const headers = [];
+  const headerRegex = /【([^】]+)】/g;
+  let match;
+  while ((match = headerRegex.exec(systemPrompt)) !== null) {
+    const h = match[1].trim();
+    if (!headers.includes(h)) {
+      headers.push(h);
+    }
+  }
+
+  if (headers.length === 0) {
+    headers.push('台湾繁体', 'English');
+  }
 
   return requestWithRetry(async () => {
     const response = await client.chat.completions.create({
@@ -113,7 +132,7 @@ async function translateCustomerMessage(text, config = {}) {
     });
 
     const content = response.choices[0].message.content;
-    return parseOpenAiResponse(content);
+    return parseOpenAiResponse(content, headers);
   });
 }
 
@@ -144,24 +163,38 @@ async function normalChat(messages, config = {}) {
 /**
  * Parses raw OpenAI text blocks into structured translation components
  */
-function parseOpenAiResponse(text) {
-  const twMatch = text.match(/【台湾繁体】([\s\S]*?)(?=【English】|$)/i);
-  const enMatch = text.match(/【English】([\s\S]*?)$/i);
+function parseOpenAiResponse(text, headers = ['台湾繁体', 'English']) {
+  const outputs = [];
+  let foundAny = false;
 
-  let taiwan = twMatch ? twMatch[1].trim() : '';
-  let english = enMatch ? enMatch[1].trim() : '';
-
-  // Fallback parsing if formatting differs
-  if (!taiwan && !english) {
-    const parts = text.split('\n\n');
-    taiwan = parts[0] || '';
-    english = parts.slice(1).join('\n\n') || '';
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    const nextH = headers[i + 1];
+    const pattern = nextH 
+      ? new RegExp(`【${escapeRegExp(h)}】([\\s\\S]*?)(?=【${escapeRegExp(nextH)}】|$)`, 'i')
+      : new RegExp(`【${escapeRegExp(h)}】([\\s\\S]*?)$`, 'i');
+    
+    const match = text.match(pattern);
+    const content = match ? match[1].trim() : '';
+    if (match) {
+      foundAny = true;
+    }
+    outputs.push({ label: h, text: content });
   }
+
+  if (!foundAny && headers.length > 0) {
+    outputs[0].text = text.trim();
+  }
+
+  // Fallback / legacy support: find a taiwan-like header and english-like header
+  const twOutput = outputs.find(o => o.label.includes('繁体') || o.label.toLowerCase().includes('taiwan') || o.label.toLowerCase().includes('tw'));
+  const enOutput = outputs.find(o => o.label.toLowerCase().includes('english') || o.label.toLowerCase().includes('en') || o.label.includes('英文'));
 
   return {
     raw: text,
-    taiwan,
-    english,
+    outputs,
+    taiwan: twOutput ? twOutput.text : (outputs[0] ? outputs[0].text : ''),
+    english: enOutput ? enOutput.text : (outputs[1] ? outputs[1].text : ''),
   };
 }
 

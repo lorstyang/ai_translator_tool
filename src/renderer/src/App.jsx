@@ -27,6 +27,32 @@ import {
   Languages
 } from 'lucide-react';
 
+const getHeadersFromPrompt = (prompt) => {
+  if (!prompt) return ['台湾繁体', 'English'];
+  const headers = [];
+  const headerRegex = /【([^】]+)】/g;
+  let match;
+  while ((match = headerRegex.exec(prompt)) !== null) {
+    const h = match[1].trim();
+    if (!headers.includes(h)) {
+      headers.push(h);
+    }
+  }
+  return headers.length > 0 ? headers : ['台湾繁体', 'English'];
+};
+
+const handleModifierEnter = (e, value, setValue) => {
+  e.preventDefault();
+  const textarea = e.target;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const newValue = value.substring(0, start) + '\n' + value.substring(end);
+  setValue(newValue);
+  setTimeout(() => {
+    textarea.selectionStart = textarea.selectionEnd = start + 1;
+  }, 0);
+};
+
 export default function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState('translate'); // 'translate' | 'chat' | 'memo' | 'history' | 'settings'
@@ -119,6 +145,24 @@ export default function App() {
   const [copiedMemoId, setCopiedMemoId] = useState(null);
   const isSavingRef = useRef(false);
 
+  const editingMemoIdRef = useRef(null);
+  const isAddingNewRef = useRef(false);
+
+  useEffect(() => {
+    editingMemoIdRef.current = editingMemoId;
+  }, [editingMemoId]);
+
+  useEffect(() => {
+    isAddingNewRef.current = isAddingNew;
+  }, [isAddingNew]);
+
+  // Memo Tab Category States
+  const [selectedCategory, setSelectedCategory] = useState('全部');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newMemoCategory, setNewMemoCategory] = useState(undefined);
+  const [editingMemoCategory, setEditingMemoCategory] = useState(undefined);
+
   // Local storage diagnostic state
   const [dbInfo, setDbInfo] = useState({ path: '', size: '' });
 
@@ -128,10 +172,12 @@ export default function App() {
     baseUrl: 'https://api.openai.com/v1',
     modelName: 'gpt-4o-mini',
     translatePrompt: '',
-    proxyUrl: 'http://127.0.0.1:7890'
+    proxyUrl: 'http://127.0.0.1:7890',
+    memoCategories: []
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [currentHeaders, setCurrentHeaders] = useState(['台湾繁体', 'English']);
 
   // Global history state
   const [history, setHistory] = useState({
@@ -148,8 +194,8 @@ export default function App() {
   const [translateError, setTranslateError] = useState('');
   const [taiwanOutput, setTaiwanOutput] = useState('');
   const [englishOutput, setEnglishOutput] = useState('');
-  const [copiedTw, setCopiedTw] = useState(false);
-  const [copiedEn, setCopiedEn] = useState(false);
+  const [translateOutputs, setTranslateOutputs] = useState([]);
+  const [copiedLabel, setCopiedLabel] = useState(null);
   const [showTranslateHistory, setShowTranslateHistory] = useState(false);
   const inputRef = useRef(null);
 
@@ -180,8 +226,10 @@ export default function App() {
               baseUrl: savedSettings.baseUrl || 'https://api.openai.com/v1',
               modelName: savedSettings.modelName || 'gpt-4o-mini',
               translatePrompt: savedSettings.translatePrompt || '',
-              proxyUrl: savedSettings.proxyUrl !== undefined ? savedSettings.proxyUrl : 'http://127.0.0.1:7890'
+              proxyUrl: savedSettings.proxyUrl !== undefined ? savedSettings.proxyUrl : 'http://127.0.0.1:7890',
+              memoCategories: savedSettings.memoCategories || []
             });
+            setCurrentHeaders(getHeadersFromPrompt(savedSettings.translatePrompt));
           }
         })
         .catch(console.error);
@@ -253,6 +301,7 @@ export default function App() {
   };
 
   const handleSaveNewMemo = (textToSave = newMemoText) => {
+    if (!isAddingNewRef.current) return;
     if (isSavingRef.current) return;
     isSavingRef.current = true;
 
@@ -260,6 +309,7 @@ export default function App() {
     if (!trimmed) {
       setIsAddingNew(false);
       setNewMemoText('');
+      setNewMemoCategory(undefined);
       isSavingRef.current = false;
       return;
     }
@@ -267,6 +317,7 @@ export default function App() {
     const newMemo = {
       id: Date.now(),
       text: trimmed,
+      category: newMemoCategory,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
@@ -276,14 +327,20 @@ export default function App() {
 
     setIsAddingNew(false);
     setNewMemoText('');
+    setNewMemoCategory(undefined);
 
     setTimeout(() => {
       isSavingRef.current = false;
     }, 50);
   };
 
-  const handleNewMemoBlur = () => {
-    handleSaveNewMemo();
+  const handleNewMemoBlur = (e) => {
+    setTimeout(() => {
+      if (document.activeElement && document.activeElement.closest('.memo-card-new')) {
+        return;
+      }
+      handleSaveNewMemo();
+    }, 150);
   };
 
   const handleStartEdit = (memo) => {
@@ -297,9 +354,11 @@ export default function App() {
 
     setEditingMemoId(memo.id);
     setEditingMemoText(memo.text);
+    setEditingMemoCategory(memo.category);
   };
 
   const handleSaveEditMemo = (id, textToSave = editingMemoText) => {
+    if (editingMemoIdRef.current !== id) return;
     if (isSavingRef.current) return;
     isSavingRef.current = true;
 
@@ -314,7 +373,7 @@ export default function App() {
 
     const updatedMemos = memos.map(m => {
       if (m.id === id) {
-        return { ...m, text: trimmed };
+        return { ...m, text: trimmed, category: editingMemoCategory };
       }
       return m;
     });
@@ -323,14 +382,20 @@ export default function App() {
     saveMemosToStorage(updatedMemos);
     setEditingMemoId(null);
     setEditingMemoText('');
+    setEditingMemoCategory(undefined);
 
     setTimeout(() => {
       isSavingRef.current = false;
     }, 50);
   };
 
-  const handleEditMemoBlur = (id) => {
-    handleSaveEditMemo(id);
+  const handleEditMemoBlur = (id, e) => {
+    setTimeout(() => {
+      if (document.activeElement && document.activeElement.closest(`.memo-card-${id}`)) {
+        return;
+      }
+      handleSaveEditMemo(id);
+    }, 150);
   };
 
   const handleDeleteMemo = (id) => {
@@ -340,6 +405,7 @@ export default function App() {
     if (editingMemoId === id) {
       setEditingMemoId(null);
       setEditingMemoText('');
+      setEditingMemoCategory(undefined);
     }
   };
 
@@ -358,13 +424,70 @@ export default function App() {
 
   const handleMemoKeyDown = (e, isNew, id) => {
     if (e.key === 'Enter') {
-      if (!e.shiftKey) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
+        if (isNew) {
+          handleModifierEnter(e, newMemoText, setNewMemoText);
+        } else {
+          handleModifierEnter(e, editingMemoText, setEditingMemoText);
+        }
+      } else {
         e.preventDefault();
         if (isNew) {
           handleSaveNewMemo();
         } else {
           handleSaveEditMemo(id);
         }
+      }
+    }
+  };
+
+  const handleAddNewMemoClick = () => {
+    if (editingMemoId !== null) {
+      handleSaveEditMemo(editingMemoId);
+    }
+    const defaultCat = (selectedCategory !== '全部' && selectedCategory !== '未分类') ? selectedCategory : undefined;
+    setNewMemoCategory(defaultCat);
+    setIsAddingNew(true);
+    setNewMemoText('');
+  };
+
+  const handleAddCategory = async (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (settings.memoCategories.includes(trimmed) || trimmed === '全部' || trimmed === '未分类') {
+      alert('分类名称已存在或不合法');
+      return;
+    }
+    const updatedCategories = [...settings.memoCategories, trimmed];
+    const newSettings = { ...settings, memoCategories: updatedCategories };
+    setSettings(newSettings);
+    if (window.api) {
+      await window.api.settings.save(newSettings);
+    }
+  };
+
+  const handleDeleteCategory = async (catName) => {
+    if (confirm(`确定要删除分类 "${catName}" 吗？此分类下的备忘录将被移至 "未分类"`)) {
+      const updatedCategories = settings.memoCategories.filter(c => c !== catName);
+      const newSettings = { ...settings, memoCategories: updatedCategories };
+      setSettings(newSettings);
+      if (window.api) {
+        await window.api.settings.save(newSettings);
+      }
+
+      // Update memos that were in this category to be undefined
+      const updatedMemos = memos.map(m => {
+        if (m.category === catName) {
+          return { ...m, category: undefined };
+        }
+        return m;
+      });
+      setMemos(updatedMemos);
+      saveMemosToStorage(updatedMemos);
+
+      // If the deleted category was selected, fall back to '全部'
+      if (selectedCategory === catName) {
+        setSelectedCategory('全部');
       }
     }
   };
@@ -389,18 +512,13 @@ export default function App() {
   const togglePin = () => window.api?.windowControls.togglePin();
 
   // Clipboard copy helper
-  const copyToClipboard = async (text, type) => {
+  const copyToClipboard = async (text, label) => {
     if (!text) return;
     try {
       if (window.api) {
         await window.api.clipboard.copyText(text);
-        if (type === 'tw') {
-          setCopiedTw(true);
-          setTimeout(() => setCopiedTw(false), 2000);
-        } else {
-          setCopiedEn(true);
-          setTimeout(() => setCopiedEn(false), 2000);
-        }
+        setCopiedLabel(label);
+        setTimeout(() => setCopiedLabel(null), 2000);
       }
     } catch (err) {
       console.error(err);
@@ -410,7 +528,9 @@ export default function App() {
   // --- Translation Actions ---
   const handleTranslateKeyDown = (e) => {
     if (e.key === 'Enter') {
-      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
+        handleModifierEnter(e, inputText, setInputText);
+      } else {
         e.preventDefault();
         handleTranslate();
       }
@@ -430,15 +550,17 @@ export default function App() {
         throw new Error(result.error);
       }
       
-      setTaiwanOutput(result.taiwan);
-      setEnglishOutput(result.english);
+      setTaiwanOutput(result.taiwan || '');
+      setEnglishOutput(result.english || '');
+      setTranslateOutputs(result.outputs || []);
 
       // Save translation item to history
       const newTranslation = {
         id: Date.now(),
         original: inputText.trim(),
-        taiwan: result.taiwan,
-        english: result.english,
+        taiwan: result.taiwan || '',
+        english: result.english || '',
+        outputs: result.outputs || [],
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         date: new Date().toLocaleDateString()
       };
@@ -458,17 +580,29 @@ export default function App() {
 
   const selectTranslateHistoryItem = (item) => {
     setInputText(item.original);
-    setTaiwanOutput(item.taiwan);
-    setEnglishOutput(item.english);
+    setTaiwanOutput(item.taiwan || '');
+    setEnglishOutput(item.english || '');
+    if (item.outputs && Array.isArray(item.outputs)) {
+      setTranslateOutputs(item.outputs);
+    } else {
+      setTranslateOutputs([
+        { label: '台湾繁体', text: item.taiwan || '' },
+        { label: 'English', text: item.english || '' }
+      ]);
+    }
     setTranslateError('');
     setShowTranslateHistory(false);
   };
 
   // --- Normal Chat Actions ---
   const handleChatKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendChatMessage();
+    if (e.key === 'Enter') {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
+        handleModifierEnter(e, chatInputText, setChatInputText);
+      } else {
+        e.preventDefault();
+        handleSendChatMessage();
+      }
     }
   };
 
@@ -564,6 +698,7 @@ export default function App() {
     try {
       if (window.api) {
         await window.api.settings.save(settings);
+        setCurrentHeaders(getHeadersFromPrompt(settings.translatePrompt));
         setSettingsSaved(true);
         setTimeout(() => setSettingsSaved(false), 2000);
       }
@@ -806,63 +941,40 @@ export default function App() {
 
             {/* Display Outputs */}
             <div className="flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto pr-0.5">
-              {/* Taiwan Output */}
-              <div className="flex-1 min-h-[90px] flex flex-col bg-slate-900/30 rounded-lg p-2.5 border border-slate-800/40 relative">
-                <div className="flex items-center justify-between mb-1.5 shrink-0">
-                  <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
-                    台湾客服风格繁体
-                  </span>
-                  {taiwanOutput && (
-                    <button
-                      onClick={() => copyToClipboard(taiwanOutput, 'tw')}
-                      className={`p-1.5 rounded-lg transition-all duration-150 ${
-                        copiedTw 
-                          ? 'text-emerald-400 bg-emerald-500/10 scale-105' 
-                          : 'text-indigo-400 hover:bg-indigo-500/10 hover:text-indigo-300'
-                      }`}
-                      title={copiedTw ? "已复制" : "复制繁体"}
-                    >
-                      {copiedTw ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  )}
-                </div>
-                <div className="flex-1 overflow-y-auto text-xs leading-relaxed select-text selection:bg-indigo-500/30 pr-1">
-                  {taiwanOutput ? (
-                    <p className="whitespace-pre-wrap">{taiwanOutput}</p>
-                  ) : (
-                    <p className="text-slate-600 italic text-[11px]">等待智能编译输出...</p>
-                  )}
-                </div>
-              </div>
-
-              {/* English Output */}
-              <div className="flex-1 min-h-[90px] flex flex-col bg-slate-900/30 rounded-lg p-2.5 border border-slate-800/40 relative">
-                <div className="flex items-center justify-between mb-1.5 shrink-0">
-                  <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
-                    英文客服口吻
-                  </span>
-                  {englishOutput && (
-                    <button
-                      onClick={() => copyToClipboard(englishOutput, 'en')}
-                      className={`p-1.5 rounded-lg transition-all duration-150 ${
-                        copiedEn 
-                          ? 'text-emerald-400 bg-emerald-500/10 scale-105' 
-                          : 'text-indigo-400 hover:bg-indigo-500/10 hover:text-indigo-300'
-                      }`}
-                      title={copiedEn ? "已复制" : "复制英文"}
-                    >
-                      {copiedEn ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  )}
-                </div>
-                <div className="flex-1 overflow-y-auto text-xs leading-relaxed select-text selection:bg-indigo-500/30 pr-1">
-                  {englishOutput ? (
-                    <p className="whitespace-pre-wrap font-sans">{englishOutput}</p>
-                  ) : (
-                    <p className="text-slate-600 italic text-[11px]">等待智能编译输出...</p>
-                  )}
-                </div>
-              </div>
+              {(translateOutputs.length > 0 ? translateOutputs : currentHeaders.map(h => ({ label: h, text: '' }))).map((output) => {
+                const header = output.label;
+                const text = output.text;
+                const isCopied = copiedLabel === header;
+                return (
+                  <div key={header} className="flex-1 min-h-[90px] flex flex-col bg-slate-900/30 rounded-lg p-2.5 border border-slate-800/40 relative">
+                    <div className="flex items-center justify-between mb-1.5 shrink-0">
+                      <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
+                        {header}
+                      </span>
+                      {text && (
+                        <button
+                          onClick={() => copyToClipboard(text, header)}
+                          className={`p-1.5 rounded-lg transition-all duration-150 ${
+                            isCopied 
+                              ? 'text-emerald-400 bg-emerald-500/10 scale-105' 
+                              : 'text-indigo-400 hover:bg-indigo-500/10 hover:text-indigo-300'
+                          }`}
+                          title={isCopied ? "已复制" : `复制${header}`}
+                        >
+                          {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-y-auto text-xs leading-relaxed select-text selection:bg-indigo-500/30 pr-1">
+                      {text ? (
+                        <p className="whitespace-pre-wrap font-sans">{text}</p>
+                      ) : (
+                        <p className="text-slate-650 italic text-[11px]">等待智能编译输出...</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* History logs are managed in the History tab */}
@@ -1052,9 +1164,24 @@ export default function App() {
                       >
                         <p className="text-xs text-slate-200 line-clamp-1 font-medium mb-1.5">{item.original}</p>
                         <div className="flex items-center justify-between text-[9.5px] text-slate-400">
-                          <span className="truncate max-w-[45%] text-slate-400">繁: {item.taiwan}</span>
-                          <span className="text-slate-600">•</span>
-                          <span className="truncate max-w-[45%] text-slate-500 font-sans">EN: {item.english}</span>
+                          {item.outputs && Array.isArray(item.outputs) ? (
+                            <div className="flex items-center space-x-1.5 truncate max-w-[90%]">
+                              {item.outputs.slice(0, 2).map((out, idx) => (
+                                <React.Fragment key={idx}>
+                                  {idx > 0 && <span className="text-slate-600 font-mono">•</span>}
+                                  <span className="truncate text-slate-400">
+                                    {out.label}: {out.text}
+                                  </span>
+                                </React.Fragment>
+                              ))}
+                            </div>
+                          ) : (
+                            <>
+                              <span className="truncate max-w-[45%] text-slate-400">繁: {item.taiwan}</span>
+                              <span className="text-slate-600">•</span>
+                              <span className="truncate max-w-[45%] text-slate-500 font-sans">EN: {item.english}</span>
+                            </>
+                          )}
                           <ChevronRight className="w-3 h-3 text-slate-600 shrink-0" />
                         </div>
                       </div>
@@ -1245,245 +1372,438 @@ export default function App() {
 
         {/* --- 5. MEMO TAB VIEW --- */}
         {activeTab === 'memo' && (
-          <div className="flex-1 flex flex-col p-3.5 space-y-2.5 overflow-hidden h-full">
-            {/* Header section */}
-            <div className="flex items-center justify-between border-b border-slate-900 pb-2.5 shrink-0">
-              <div className="flex items-center space-x-1.5">
-                <StickyNote className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-                <h2 className="text-xs font-semibold text-slate-200">
-                  工作备忘录
-                </h2>
-                <span className="text-[10px] text-slate-500 font-mono mt-0.5">
-                  ({memos.length})
-                </span>
-              </div>
-              
-              {/* Status Indicator */}
-              <div className="flex items-center">
-                {memoSaveStatus === 'saving' && (
-                  <span className="text-[9.5px] text-slate-500 flex items-center space-x-1 font-sans">
-                    <Loader2 className="w-2.5 h-2.5 animate-spin text-indigo-400" />
-                    <span>正在保存...</span>
-                  </span>
-                )}
-                {memoSaveStatus === 'saved' && (
-                  <span className="text-[9.5px] text-emerald-400 flex items-center space-x-1 font-sans">
-                    <Check className="w-2.5 h-2.5" />
-                    <span>已存盘</span>
-                  </span>
-                )}
-                {memoSaveStatus === 'error' && (
-                  <span className="text-[9.5px] text-red-400 flex items-center space-x-1 font-sans">
-                    <AlertCircle className="w-2.5 h-2.5" />
-                    <span>保存失败</span>
-                  </span>
-                )}
-              </div>
-            </div>
+          <div className="flex-1 flex flex-row overflow-hidden h-full">
+            {/* Left Sidebar for Categories */}
+            <div className="w-[105px] shrink-0 bg-slate-950/20 border-r border-slate-900/60 flex flex-col p-2 min-h-0 space-y-1.5 select-none text-[11px] no-drag-area">
+              <div className="flex-1 overflow-y-auto space-y-1 pr-0.5">
+                {/* All Memos */}
+                <button
+                  onClick={() => setSelectedCategory('全部')}
+                  className={`w-full text-left px-2 py-1.5 rounded-md font-medium transition-all truncate flex items-center justify-between ${
+                    selectedCategory === '全部'
+                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 shadow-inner'
+                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <span>全部</span>
+                  <span className="text-[9px] text-slate-500 font-mono">({memos.length})</span>
+                </button>
 
-            {/* Scrollable Container */}
-            <div className="flex-1 overflow-y-auto pr-0.5 space-y-2.5 min-h-0">
-              {/* Add New Memo Panel or Centered Plus Button */}
-              {isAddingNew ? (
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-indigo-500/20 shadow-md animate-fadeIn flex flex-col space-y-2">
-                  <textarea
-                    autoFocus
-                    rows={3}
-                    value={newMemoText}
-                    onChange={(e) => setNewMemoText(e.target.value)}
-                    onKeyDown={(e) => handleMemoKeyDown(e, true)}
-                    onBlur={handleNewMemoBlur}
-                    placeholder="在此输入新备忘内容，按 Enter 保存，Shift+Enter 换行..."
-                    className="glass-input w-full rounded-lg p-2.5 text-xs focus:outline-none placeholder:text-slate-500 text-slate-100 leading-relaxed font-sans resize-none bg-slate-950/40 border border-slate-800/40 focus:border-indigo-500/30"
-                  />
-                  <div className="flex items-center justify-between pt-0.5">
-                    <span className="text-[9px] text-slate-500 font-mono">
-                      {newMemoText.length} 字
-                    </span>
-                    <div className="flex items-center space-x-2">
+                {/* Uncategorized */}
+                <button
+                  onClick={() => setSelectedCategory('未分类')}
+                  className={`w-full text-left px-2 py-1.5 rounded-md font-medium transition-all truncate flex items-center justify-between ${
+                    selectedCategory === '未分类'
+                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 shadow-inner'
+                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <span>未分类</span>
+                  <span className="text-[9px] text-slate-500 font-mono">
+                    ({memos.filter(m => !m.category).length})
+                  </span>
+                </button>
+
+                {/* Custom Categories */}
+                {settings.memoCategories.map(cat => {
+                  const count = memos.filter(m => m.category === cat).length;
+                  return (
+                    <div
+                      key={cat}
+                      className={`group flex items-center justify-between rounded-md transition-all border relative ${
+                        selectedCategory === cat
+                          ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/20 shadow-inner'
+                          : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200 border-transparent'
+                      }`}
+                    >
+                      <button
+                        onClick={() => setSelectedCategory(cat)}
+                        className="flex-1 text-left px-2 py-1.5 font-medium truncate pr-6 text-left"
+                      >
+                        {cat}
+                      </button>
+                      <span className="absolute right-2 text-[9px] text-slate-500 font-mono group-hover:hidden">
+                        ({count})
+                      </span>
+                      <button
+                        onClick={() => handleDeleteCategory(cat)}
+                        className="hidden group-hover:flex absolute right-1.5 p-0.5 rounded text-slate-400 hover:text-red-400 transition-colors"
+                        title="删除分类"
+                      >
+                        <Trash2 className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add Custom Category Form */}
+              <div className="pt-1.5 border-t border-slate-900/60 shrink-0">
+                {isAddingCategory ? (
+                  <div className="flex flex-col space-y-1">
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="分类名称..."
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddCategory(newCategoryName);
+                          setIsAddingCategory(false);
+                          setNewCategoryName('');
+                        } else if (e.key === 'Escape') {
+                          setIsAddingCategory(false);
+                          setNewCategoryName('');
+                        }
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (newCategoryName.trim()) {
+                            handleAddCategory(newCategoryName);
+                          }
+                          setIsAddingCategory(false);
+                          setNewCategoryName('');
+                        }, 150);
+                      }}
+                      className="w-full bg-slate-950/60 border border-slate-800 focus:border-indigo-500/30 rounded px-1.5 py-1 text-[10px] text-slate-100 placeholder:text-slate-650 focus:outline-none"
+                    />
+                    <div className="flex items-center justify-between text-[9px] px-0.5">
                       <button
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          setIsAddingNew(false);
-                          setNewMemoText('');
+                          setIsAddingCategory(false);
+                          setNewCategoryName('');
                         }}
-                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-slate-200 transition-colors text-[10px] font-medium"
+                        className="text-slate-500 hover:text-slate-350"
                       >
                         取消
                       </button>
                       <button
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          handleSaveNewMemo();
+                          handleAddCategory(newCategoryName);
+                          setIsAddingCategory(false);
+                          setNewCategoryName('');
                         }}
-                        className="px-2.5 py-1 rounded bg-indigo-650/80 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-650/15 transition-all text-[10px] font-medium"
+                        className="text-indigo-450 font-medium hover:text-indigo-350"
                       >
-                        保存
+                        添加
                       </button>
                     </div>
                   </div>
+                ) : (
+                  <button
+                    onClick={() => setIsAddingCategory(true)}
+                    className="w-full py-1 text-slate-500 hover:text-indigo-400 border border-dashed border-slate-800 hover:border-indigo-500/20 rounded flex items-center justify-center space-x-0.5 transition-colors font-medium"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>添加分类</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Right Memos Flow */}
+            <div className="flex-1 flex flex-col p-3.5 space-y-2.5 overflow-hidden h-full">
+              {/* Header section */}
+              <div className="flex items-center justify-between border-b border-slate-900 pb-2.5 shrink-0">
+                <div className="flex items-center space-x-1.5">
+                  <StickyNote className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                  <h2 className="text-xs font-semibold text-slate-200">
+                    {selectedCategory === '全部' ? '工作备忘录' : selectedCategory}
+                  </h2>
+                  <span className="text-[10px] text-slate-500 font-mono mt-0.5">
+                    ({
+                      memos.filter(memo => {
+                        if (selectedCategory === '全部') return true;
+                        if (selectedCategory === '未分类') return !memo.category;
+                        return memo.category === selectedCategory;
+                      }).length
+                    })
+                  </span>
                 </div>
-              ) : (
-                <button
-                  onClick={() => {
-                    if (editingMemoId !== null) {
-                      handleSaveEditMemo(editingMemoId);
-                    }
-                    setIsAddingNew(true);
-                    setNewMemoText('');
-                  }}
-                  className="w-full py-3.5 rounded-xl border border-dashed border-slate-800 hover:border-indigo-500/30 bg-slate-900/10 hover:bg-indigo-600/5 text-slate-500 hover:text-indigo-400 flex items-center justify-center transition-all duration-200 shrink-0"
-                  title="新增备忘"
-                >
-                  <Plus className="w-4 h-4 text-slate-450 hover:text-indigo-400 transition-colors" />
-                </button>
-              )}
+                
+                {/* Status Indicator */}
+                <div className="flex items-center">
+                  {memoSaveStatus === 'saving' && (
+                    <span className="text-[9.5px] text-slate-500 flex items-center space-x-1 font-sans">
+                      <Loader2 className="w-2.5 h-2.5 animate-spin text-indigo-400" />
+                      <span>正在保存...</span>
+                    </span>
+                  )}
+                  {memoSaveStatus === 'saved' && (
+                    <span className="text-[9.5px] text-emerald-400 flex items-center space-x-1 font-sans">
+                      <Check className="w-2.5 h-2.5" />
+                      <span>已存盘</span>
+                    </span>
+                  )}
+                  {memoSaveStatus === 'error' && (
+                    <span className="text-[9.5px] text-red-400 flex items-center space-x-1 font-sans">
+                      <AlertCircle className="w-2.5 h-2.5" />
+                      <span>保存失败</span>
+                    </span>
+                  )}
+                </div>
+              </div>
 
-              {/* Memos List */}
-              {memos.length === 0 ? (
-                !isAddingNew && (
-                  <div className="flex flex-col items-center justify-center text-center p-8 text-slate-500 space-y-2.5 mt-8">
-                    <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center border border-slate-800">
-                      <StickyNote className="w-5 h-5 text-indigo-400/80" />
+              {/* Scrollable Container */}
+              <div className="flex-1 overflow-y-auto pr-0.5 space-y-2.5 min-h-0">
+                {/* Add New Memo Panel or Centered Plus Button */}
+                {isAddingNew ? (
+                  <div className="memo-card-new p-3.5 rounded-xl bg-slate-900/60 border border-indigo-500/20 shadow-md animate-fadeIn flex flex-col space-y-2">
+                    <textarea
+                      autoFocus
+                      rows={6}
+                      value={newMemoText}
+                      onChange={(e) => setNewMemoText(e.target.value)}
+                      onKeyDown={(e) => handleMemoKeyDown(e, true)}
+                      onBlur={handleNewMemoBlur}
+                      placeholder="在此输入新备忘内容，按 Enter 保存，Ctrl/Shift/Alt+Enter 换行..."
+                      className="glass-input w-full rounded-lg p-2.5 text-xs focus:outline-none placeholder:text-slate-500 text-slate-100 leading-relaxed font-sans resize-y bg-slate-950/40 border border-slate-800/40 focus:border-indigo-500/30"
+                    />
+                    <div className="flex items-center justify-between pt-0.5">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[9px] text-slate-500 font-mono">
+                          {newMemoText.length} 字
+                        </span>
+                        
+                        {/* Category Dropdown */}
+                        <select
+                          value={newMemoCategory || ''}
+                          onChange={(e) => {
+                            const val = e.target.value || undefined;
+                            setNewMemoCategory(val);
+                            const card = e.target.closest('.memo-card-new');
+                            setTimeout(() => {
+                              card?.querySelector('textarea')?.focus();
+                            }, 50);
+                          }}
+                          onBlur={handleNewMemoBlur}
+                          className="text-[10px] bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-slate-350 focus:outline-none"
+                        >
+                          <option value="">未分类</option>
+                          {settings.memoCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsAddingNew(false);
+                            setNewMemoText('');
+                            setNewMemoCategory(undefined);
+                          }}
+                          className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-slate-200 transition-colors text-[10px] font-medium"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSaveNewMemo();
+                          }}
+                          className="px-2.5 py-1 rounded bg-indigo-650/80 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-650/15 transition-all text-[10px] font-medium"
+                        >
+                          保存
+                        </button>
+                      </div>
                     </div>
-                    <h3 className="text-xs font-semibold text-slate-300">暂无工作备忘</h3>
-                    <p className="text-[10px] leading-relaxed max-w-[200px]">
-                      点击上方的“+”号按钮，记录您的日常备忘、常用快捷回复或工作记录。
-                    </p>
                   </div>
-                )
-              ) : (
-                memos.map((memo) => {
-                  const isEditing = editingMemoId === memo.id;
-                  return (
-                    <div
-                      key={memo.id}
-                      className={`group rounded-xl border transition-all duration-200 ${
-                        isEditing
-                          ? 'bg-slate-900/60 border-indigo-500/20 shadow-md p-3.5 space-y-2'
-                          : 'bg-slate-900/30 hover:bg-slate-900/50 border-slate-900 hover:border-slate-850 py-2.5 px-3 flex flex-col justify-center cursor-pointer relative overflow-hidden'
-                      }`}
-                      onClick={() => {
-                        if (!isEditing) {
-                          handleStartEdit(memo);
-                        }
-                      }}
-                    >
-                      {isEditing ? (
-                        /* Expanded Editing View */
-                        <>
-                          <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono select-none">
-                            <span>编辑于 {memo.timestamp}</span>
-                            <span className="text-slate-600 font-mono">{editingMemoText.length} 字</span>
-                          </div>
-                          
-                          <textarea
-                            autoFocus
-                            rows={3}
-                            value={editingMemoText}
-                            onChange={(e) => setEditingMemoText(e.target.value)}
-                            onKeyDown={(e) => handleMemoKeyDown(e, false, memo.id)}
-                            onBlur={() => handleEditMemoBlur(memo.id)}
-                            placeholder="在此输入备忘内容，按 Enter 保存，Shift+Enter 换行..."
-                            className="glass-input w-full rounded-lg p-2.5 text-xs focus:outline-none placeholder:text-slate-500 text-slate-100 leading-relaxed font-sans resize-none bg-slate-950/40 border border-slate-800/40 focus:border-indigo-500/30"
-                          />
-                          
-                          <div className="flex items-center justify-between pt-0.5">
-                            <div className="flex items-center space-x-1">
-                              <button
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  handleCopyMemo(memo.id, editingMemoText);
-                                }}
-                                className={`p-1.5 rounded-lg transition-all duration-150 ${
-                                  copiedMemoId === memo.id
-                                    ? 'text-emerald-400 bg-emerald-500/10 scale-105'
-                                    : 'text-slate-400 hover:bg-indigo-500/10 hover:text-indigo-300'
-                                }`}
-                                title={copiedMemoId === memo.id ? "已复制" : "复制"}
-                              >
-                                {copiedMemoId === memo.id ? (
-                                  <Check className="w-3.5 h-3.5" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5" />
-                                )}
-                              </button>
+                ) : (
+                  <button
+                    onClick={handleAddNewMemoClick}
+                    className="w-full py-3.5 rounded-xl border border-dashed border-slate-800 hover:border-indigo-500/30 bg-slate-900/10 hover:bg-indigo-600/5 text-slate-500 hover:text-indigo-400 flex items-center justify-center transition-all duration-200 shrink-0"
+                    title="新增备忘"
+                  >
+                    <Plus className="w-4 h-4 text-slate-450 hover:text-indigo-400 transition-colors" />
+                  </button>
+                )}
 
-                              <button
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  if (confirm('确认删除此条备忘吗？')) {
-                                    handleDeleteMemo(memo.id);
-                                  }
-                                }}
-                                className="p-1.5 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
-                                title="删除"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-
-                            <button
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                handleSaveEditMemo(memo.id);
-                              }}
-                              className="px-2.5 py-1 rounded bg-indigo-650/80 hover:bg-indigo-600 text-white shadow-lg transition-all text-[10px] font-medium"
-                            >
-                              保存
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        /* Collapsed Preview View */
-                        <>
-                          <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mb-1 select-none">
-                            <span>{memo.timestamp}</span>
-                            <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1.5 transition-all duration-150">
-                              <button
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  handleCopyMemo(memo.id, memo.text);
-                                }}
-                                className={`p-1 rounded transition-colors duration-150 ${
-                                  copiedMemoId === memo.id
-                                    ? 'text-emerald-400'
-                                    : 'text-slate-400 hover:text-indigo-300'
-                                }`}
-                                title="复制"
-                              >
-                                {copiedMemoId === memo.id ? (
-                                  <Check className="w-3 h-3" />
-                                ) : (
-                                  <Copy className="w-3 h-3" />
-                                )}
-                              </button>
-                              <button
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  if (confirm('确认删除此条备忘吗？')) {
-                                    handleDeleteMemo(memo.id);
-                                  }
-                                }}
-                                className="p-1 rounded text-slate-400 hover:text-red-400 transition-colors duration-150"
-                                title="删除"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                          
-                          <p className="text-xs text-slate-200 truncate select-none leading-relaxed font-sans pr-4 font-medium">
-                            {memo.text}
-                          </p>
-                        </>
-                      )}
+                {/* Memos List */}
+                {memos.filter(memo => {
+                  if (selectedCategory === '全部') return true;
+                  if (selectedCategory === '未分类') return !memo.category;
+                  return memo.category === selectedCategory;
+                }).length === 0 ? (
+                  !isAddingNew && (
+                    <div className="flex flex-col items-center justify-center text-center p-8 text-slate-500 space-y-2.5 mt-8">
+                      <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center border border-slate-800">
+                        <StickyNote className="w-5 h-5 text-indigo-400/80" />
+                      </div>
+                      <h3 className="text-xs font-semibold text-slate-300">暂无工作备忘</h3>
+                      <p className="text-[10px] leading-relaxed max-w-[200px]">
+                        点击上方的“+”号按钮，记录您的日常备忘、常用快捷回复或工作记录。
+                      </p>
                     </div>
-                  );
-                })
-              )}
+                  )
+                ) : (
+                  memos.filter(memo => {
+                    if (selectedCategory === '全部') return true;
+                    if (selectedCategory === '未分类') return !memo.category;
+                    return memo.category === selectedCategory;
+                  }).map((memo) => {
+                    const isEditing = editingMemoId === memo.id;
+                    return (
+                      <div
+                        key={memo.id}
+                        className={`memo-card-${memo.id} group rounded-xl border transition-all duration-200 ${
+                          isEditing
+                            ? 'bg-slate-900/60 border-indigo-500/20 shadow-md p-3.5 space-y-2'
+                            : 'bg-slate-900/30 hover:bg-slate-900/50 border-slate-900 hover:border-slate-850 py-2.5 px-3 flex flex-col justify-center cursor-pointer relative overflow-hidden'
+                        }`}
+                        onClick={() => {
+                          if (!isEditing) {
+                            handleStartEdit(memo);
+                          }
+                        }}
+                      >
+                        {isEditing ? (
+                          /* Expanded Editing View */
+                          <>
+                            <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono select-none">
+                              <span>编辑于 {memo.timestamp}</span>
+                              <span className="text-slate-600 font-mono">{editingMemoText.length} 字</span>
+                            </div>
+                            
+                            <textarea
+                              autoFocus
+                              rows={6}
+                              value={editingMemoText}
+                              onChange={(e) => setEditingMemoText(e.target.value)}
+                              onKeyDown={(e) => handleMemoKeyDown(e, false, memo.id)}
+                              onBlur={(e) => handleEditMemoBlur(memo.id, e)}
+                              placeholder="在此输入备忘内容，按 Enter 保存，Ctrl/Shift/Alt+Enter 换行..."
+                              className="glass-input w-full rounded-lg p-2.5 text-xs focus:outline-none placeholder:text-slate-500 text-slate-100 leading-relaxed font-sans resize-y bg-slate-950/40 border border-slate-800/40 focus:border-indigo-500/30"
+                            />
+                            
+                            <div className="flex items-center justify-between pt-0.5">
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    handleCopyMemo(memo.id, editingMemoText);
+                                  }}
+                                  className={`p-1.5 rounded-lg transition-all duration-150 ${
+                                    copiedMemoId === memo.id
+                                      ? 'text-emerald-400 bg-emerald-500/10 scale-105'
+                                      : 'text-slate-400 hover:bg-indigo-500/10 hover:text-indigo-300'
+                                  }`}
+                                  title={copiedMemoId === memo.id ? "已复制" : "复制"}
+                                >
+                                  {copiedMemoId === memo.id ? (
+                                    <Check className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+
+                                <button
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    if (confirm('确认删除此条备忘吗？')) {
+                                      handleDeleteMemo(memo.id);
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                                  title="删除"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Category Selection Dropdown */}
+                                <select
+                                  value={editingMemoCategory || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value || undefined;
+                                    setEditingMemoCategory(val);
+                                    const card = e.target.closest(`.memo-card-${memo.id}`);
+                                    setTimeout(() => {
+                                      card?.querySelector('textarea')?.focus();
+                                    }, 50);
+                                  }}
+                                  onBlur={(e) => handleEditMemoBlur(memo.id, e)}
+                                  className="text-[10px] bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-slate-355 focus:outline-none"
+                                >
+                                  <option value="">未分类</option>
+                                  {settings.memoCategories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <button
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleSaveEditMemo(memo.id);
+                                }}
+                                className="px-2.5 py-1 rounded bg-indigo-650/80 hover:bg-indigo-600 text-white shadow-lg transition-all text-[10px] font-medium"
+                              >
+                                保存
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          /* Collapsed Preview View */
+                          <>
+                            <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mb-1 select-none">
+                              <div className="flex items-center space-x-1.5">
+                                <span>{memo.timestamp}</span>
+                                {selectedCategory === '全部' && memo.category && (
+                                  <span className="px-1 py-0.2 rounded text-[8px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">
+                                    {memo.category}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1.5 transition-all duration-150">
+                                <button
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    handleCopyMemo(memo.id, memo.text);
+                                  }}
+                                  className={`p-1 transition-colors duration-150 ${
+                                    copiedMemoId === memo.id
+                                      ? 'text-emerald-400'
+                                      : 'text-slate-400 hover:text-indigo-300'
+                                  }`}
+                                  title="复制"
+                                >
+                                  {copiedMemoId === memo.id ? (
+                                    <Check className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                                <button
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    if (confirm('确认删除此条备忘吗？')) {
+                                      handleDeleteMemo(memo.id);
+                                    }
+                                  }}
+                                  className="p-1 rounded text-slate-400 hover:text-red-400 transition-colors duration-150"
+                                  title="删除"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <p className="text-xs text-slate-200 truncate select-none leading-relaxed font-sans pr-4 font-medium">
+                              {memo.text}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         )}

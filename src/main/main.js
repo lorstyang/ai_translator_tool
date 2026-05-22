@@ -156,7 +156,8 @@ function readSettings() {
           baseUrl: 'https://api.openai.com/v1',
           modelName: 'gpt-4o-mini',
           translatePrompt: DEFAULT_PROMPT,
-          proxyUrl: 'http://127.0.0.1:7890'
+          proxyUrl: 'http://127.0.0.1:7890',
+          memoCategories: []
         };
       }
       const parsed = JSON.parse(data);
@@ -170,7 +171,8 @@ function readSettings() {
         baseUrl: parsed.baseUrl || 'https://api.openai.com/v1',
         modelName: parsed.modelName || 'gpt-4o-mini',
         translatePrompt: parsed.translatePrompt || DEFAULT_PROMPT,
-        proxyUrl: parsed.proxyUrl !== undefined ? parsed.proxyUrl : 'http://127.0.0.1:7890'
+        proxyUrl: parsed.proxyUrl !== undefined ? parsed.proxyUrl : 'http://127.0.0.1:7890',
+        memoCategories: parsed.memoCategories || []
       };
     }
   } catch (error) {
@@ -182,7 +184,8 @@ function readSettings() {
     baseUrl: 'https://api.openai.com/v1',
     modelName: 'gpt-4o-mini',
     translatePrompt: DEFAULT_PROMPT,
-    proxyUrl: 'http://127.0.0.1:7890'
+    proxyUrl: 'http://127.0.0.1:7890',
+    memoCategories: []
   };
 }
 
