@@ -133,6 +133,17 @@ const DEFAULT_PROMPT = `你是专业客服翻译助手。
 【English】
 [自然的英文客服口吻翻译]`;
 
+// Utility to snap window size to exact 380/580 aspect ratio (19:29 ratio)
+function getSnappedSize(width) {
+  let k = Math.round((width || 380) / 19);
+  if (k < 17) k = 17; // minWidth 323, minHeight 493
+  if (k > 31) k = 31; // maxWidth 589, maxHeight 899
+  return {
+    width: k * 19,
+    height: k * 29
+  };
+}
+
 // Utility to read settings
 function readSettings() {
   try {
@@ -149,13 +160,10 @@ function readSettings() {
         };
       }
       const parsed = JSON.parse(data);
-      let width = parsed.width;
-      let height = parsed.height;
-      if (!width || width < 320) width = 380;
-      if (!height || height < 480) height = 580;
+      const snapped = getSnappedSize(parsed.width || 380);
       return {
-        width,
-        height,
+        width: snapped.width,
+        height: snapped.height,
         x: parsed.x,
         y: parsed.y,
         apiKey: parsed.apiKey || '',
@@ -197,10 +205,10 @@ function createWindow() {
     height: settings.height || 580,
     x: settings.x,
     y: settings.y,
-    minWidth: 320,
-    minHeight: 488, // Aligned with 380/580 aspect ratio (320 * 580 / 380 = 488)
-    maxWidth: 590,  // Aligned with 380/580 aspect ratio (900 * 380 / 580 = 590)
-    maxHeight: 900,
+    minWidth: 323,
+    minHeight: 493, // Aligned with 380/580 aspect ratio (19 * 17 = 323, 29 * 17 = 493)
+    maxWidth: 589,  // Aligned with 380/580 aspect ratio (19 * 31 = 589, 29 * 31 = 899)
+    maxHeight: 899,
     frame: false, // Frameless UI
     alwaysOnTop: true, // Always on top
     transparent: false, // Disable transparency
@@ -221,10 +229,9 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     // Force bounds correction if restored size is too small (e.g. from closing in floating ball state)
     const bounds = mainWindow.getBounds();
-    if (bounds.width < 320 || bounds.height < 488) {
-      const targetWidth = Math.max(settings.width || 380, 320);
-      const targetHeight = Math.round(targetWidth * (580 / 380));
-      mainWindow.setSize(targetWidth, targetHeight);
+    if (bounds.width < 323 || bounds.height < 493) {
+      const snapped = getSnappedSize(settings.width || 380);
+      mainWindow.setSize(snapped.width, snapped.height);
     }
     mainWindow.show();
   });
@@ -353,8 +360,8 @@ ipcMain.on('window-control', (event, action, data) => {
 
     // Restore size constraints and aspect ratio
     mainWindow.setResizable(true);
-    mainWindow.setMinimumSize(320, 488);
-    mainWindow.setMaximumSize(590, 900);
+    mainWindow.setMinimumSize(323, 493);
+    mainWindow.setMaximumSize(589, 899);
     mainWindow.setAspectRatio(380 / 580);
     
     // Restore original pin status
@@ -373,12 +380,10 @@ ipcMain.on('window-control', (event, action, data) => {
   } else if (action === 'move-window') {
     if (!data) return;
     const bounds = mainWindow.getBounds();
-    mainWindow.setBounds({
-      x: Math.round(bounds.x + data.dx),
-      y: Math.round(bounds.y + data.dy),
-      width: bounds.width,
-      height: bounds.height
-    });
+    mainWindow.setPosition(
+      Math.round(bounds.x + data.dx),
+      Math.round(bounds.y + data.dy)
+    );
   }
 });
 
