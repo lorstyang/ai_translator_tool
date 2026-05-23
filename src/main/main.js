@@ -339,16 +339,16 @@ ipcMain.on('window-control', (event, action, data) => {
     wasAlwaysOnTop = mainWindow.isAlwaysOnTop();
     mainWindow.setAlwaysOnTop(true);
     
-    // Remove minimum size limits and aspect ratio
-    mainWindow.setMinimumSize(40, 40);
-    mainWindow.setMaximumSize(10000, 10000);
+    // Lock size limits to exactly 60x60 in floating ball mode
+    const ballSize = 60;
+    mainWindow.setMinimumSize(ballSize, ballSize);
+    mainWindow.setMaximumSize(ballSize, ballSize);
     mainWindow.setAspectRatio(0);
     
     // Disable resizable: Electron docs warn transparent + resizable breaks on macOS
     mainWindow.setResizable(false);
     
     // Position floating ball at top-right of original window
-    const ballSize = 60;
     const targetBounds = {
       x: Math.round(originalBounds.x + originalBounds.width - ballSize),
       y: Math.round(originalBounds.y),
@@ -418,7 +418,16 @@ ipcMain.on('window-control', (event, action, data) => {
     const targetX = Math.round(bounds.x + data.dx);
     const targetY = Math.round(bounds.y + data.dy);
     console.log(`[Main Process] [move-window] dx: ${data.dx}, dy: ${data.dy}, oldPosition: (${bounds.x}, ${bounds.y}), targetPosition: (${targetX}, ${targetY}), oldSize: ${bounds.width}x${bounds.height}`);
-    mainWindow.setPosition(targetX, targetY);
+    if (isFloatingBall) {
+      mainWindow.setBounds({
+        x: targetX,
+        y: targetY,
+        width: 60,
+        height: 60
+      });
+    } else {
+      mainWindow.setPosition(targetX, targetY);
+    }
     const postBounds = mainWindow.getBounds();
     console.log(`[Main Process] [move-window] Done. postBounds: (${postBounds.x}, ${postBounds.y}) size: ${postBounds.width}x${postBounds.height}`);
   }
