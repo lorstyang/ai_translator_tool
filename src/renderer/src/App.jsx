@@ -66,6 +66,7 @@ export default function App() {
   const isRestoringRef = useRef(false);
 
   const handleBallPointerDown = (e) => {
+    console.log(`[Renderer] pointerdown - button: ${e.button}, client: (${e.clientX}, ${e.clientY}), screen: (${e.screenX}, ${e.screenY}), isRestoring: ${isRestoringRef.current}`);
     if (e.button !== 0 || isRestoringRef.current) return;
     isDraggingRef.current = true;
     hasMovedRef.current = false;
@@ -78,6 +79,7 @@ export default function App() {
     if (!isDraggingRef.current || isRestoringRef.current) return;
     const dx = e.screenX - dragStartRef.current.x;
     const dy = e.screenY - dragStartRef.current.y;
+    console.log(`[Renderer] pointermove - screenX: ${e.screenX}, screenY: ${e.screenY}, dragStartX: ${dragStartRef.current.x}, dragStartY: ${dragStartRef.current.y}, dx: ${dx}, dy: ${dy}`);
     if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
       hasMovedRef.current = true;
     }
@@ -88,10 +90,12 @@ export default function App() {
   };
 
   const handleBallPointerUp = (e) => {
+    console.log(`[Renderer] pointerup - isDragging: ${isDraggingRef.current}, hasMoved: ${hasMovedRef.current}, isRestoring: ${isRestoringRef.current}`);
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
     e.currentTarget.releasePointerCapture(e.pointerId);
     if (!hasMovedRef.current && !isRestoringRef.current) {
+      console.log('[Renderer] pointerup - Triggering handleRestore');
       handleRestore();
     }
   };

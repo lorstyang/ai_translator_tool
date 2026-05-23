@@ -240,10 +240,23 @@ function createWindow() {
   });
 
   // Prevent resizing when in floating ball mode
-  mainWindow.on('will-resize', (event) => {
+  mainWindow.on('will-resize', (event, newBounds) => {
+    const current = mainWindow.getBounds();
+    console.log(`[Main Process] [Event: will-resize] isFloatingBall: ${isFloatingBall}, current: ${current.width}x${current.height} @ (${current.x}, ${current.y}), target: ${newBounds.width}x${newBounds.height} @ (${newBounds.x}, ${newBounds.y})`);
     if (isFloatingBall) {
+      console.log('[Main Process] [Event: will-resize] Prevented window resize in floating ball mode.');
       event.preventDefault();
     }
+  });
+
+  mainWindow.on('resize', () => {
+    const current = mainWindow.getBounds();
+    console.log(`[Main Process] [Event: resize] isFloatingBall: ${isFloatingBall}, size: ${current.width}x${current.height} @ (${current.x}, ${current.y})`);
+  });
+
+  mainWindow.on('move', () => {
+    const current = mainWindow.getBounds();
+    console.log(`[Main Process] [Event: move] isFloatingBall: ${isFloatingBall}, size: ${current.width}x${current.height} @ (${current.x}, ${current.y})`);
   });
 
   // Load app
@@ -254,9 +267,11 @@ function createWindow() {
   }
 
   // Save window bounds on resize/move finished or window close to optimize drag performance
-  const saveBounds = () => {
-    if (!mainWindow || isFloatingBall) return;
+  const saveBounds = (triggerEvent) => {
+    if (!mainWindow) return;
     const bounds = mainWindow.getBounds();
+    console.log(`[Main Process] saveBounds [Trigger: ${triggerEvent || 'unknown'}]. isFloatingBall: ${isFloatingBall}, bounds: ${bounds.width}x${bounds.height} @ (${bounds.x}, ${bounds.y})`);
+    if (isFloatingBall) return;
     writeSettings({
       width: bounds.width,
       height: bounds.height,
@@ -265,9 +280,18 @@ function createWindow() {
     });
   };
 
-  mainWindow.on('resized', saveBounds);
-  mainWindow.on('moved', saveBounds);
-  mainWindow.on('close', saveBounds);
+  mainWindow.on('resized', () => {
+    console.log(`[Main Process] [Event: resized] isFloatingBall: ${isFloatingBall}`);
+    saveBounds('resized');
+  });
+  mainWindow.on('moved', () => {
+    console.log(`[Main Process] [Event: moved] isFloatingBall: ${isFloatingBall}`);
+    saveBounds('moved');
+  });
+  mainWindow.on('close', () => {
+    console.log(`[Main Process] [Event: close]`);
+    saveBounds('close');
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -305,9 +329,11 @@ ipcMain.on('window-control', (event, action, data) => {
   } else if (action === 'get-pin-status') {
     event.returnValue = mainWindow.isAlwaysOnTop();
   } else if (action === 'shrink-to-icon') {
+    console.log('[Main Process] [shrink-to-icon] Start. isFloatingBall:', isFloatingBall);
     if (isFloatingBall) return;
     isFloatingBall = true;
     originalBounds = mainWindow.getBounds();
+    console.log('[Main Process] [shrink-to-icon] Saved originalBounds:', originalBounds);
     
     // Save current pin status to always keep floating ball on top
     wasAlwaysOnTop = mainWindow.isAlwaysOnTop();
@@ -330,13 +356,17 @@ ipcMain.on('window-control', (event, action, data) => {
       height: ballSize
     };
     
+    console.log('[Main Process] [shrink-to-icon] Setting targetBounds:', targetBounds);
     // Perform animated window resize to floating ball position/size
     mainWindow.setBounds(targetBounds, true);
+    console.log('[Main Process] [shrink-to-icon] End. Current Bounds:', mainWindow.getBounds());
   } else if (action === 'restore-from-icon') {
+    console.log('[Main Process] [restore-from-icon] Start. isFloatingBall:', isFloatingBall, 'originalBounds:', originalBounds);
     if (!isFloatingBall || !originalBounds) return;
     isFloatingBall = false;
     
     const ballBounds = mainWindow.getBounds();
+    console.log('[Main Process] [restore-from-icon] Current ballBounds:', ballBounds);
     let restoreX = ballBounds.x + ballBounds.width - originalBounds.width;
     let restoreY = ballBounds.y;
 
@@ -377,16 +407,20 @@ ipcMain.on('window-control', (event, action, data) => {
       height: originalBounds.height
     };
     
+    console.log('[Main Process] [restore-from-icon] Setting restoreBounds:', restoreBounds);
     // Perform animated window restore to original bounds
     mainWindow.setBounds(restoreBounds, true);
     mainWindow.focus();
+    console.log('[Main Process] [restore-from-icon] End. Current Bounds:', mainWindow.getBounds());
   } else if (action === 'move-window') {
     if (!data) return;
     const bounds = mainWindow.getBounds();
-    mainWindow.setPosition(
-      Math.round(bounds.x + data.dx),
-      Math.round(bounds.y + data.dy)
-    );
+    const targetX = Math.round(bounds.x + data.dx);
+    const targetY = Math.round(bounds.y + data.dy);
+    console.log(`[Main Process] [move-window] dx: ${data.dx}, dy: ${data.dy}, oldPosition: (${bounds.x}, ${bounds.y}), targetPosition: (${targetX}, ${targetY}), oldSize: ${bounds.width}x${bounds.height}`);
+    mainWindow.setPosition(targetX, targetY);
+    const postBounds = mainWindow.getBounds();
+    console.log(`[Main Process] [move-window] Done. postBounds: (${postBounds.x}, ${postBounds.y}) size: ${postBounds.width}x${postBounds.height}`);
   }
 });
 
