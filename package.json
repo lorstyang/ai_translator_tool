@@ -10,7 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "cross-env NODE_ENV=production electron .",
-    "dist": "npm run build && electron-builder --win"
+    "dist": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

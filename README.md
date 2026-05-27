@@ -76,17 +76,19 @@ npm run dev
 
 ---
 
-## 🛠️ Windows 运维脚本
+## 🛠️ 快捷运行与运维脚本
 
-为了方便在 Windows 环境下更新与快速交付，我们在根目录下添加了两个 `.bat` 批处理文件：
+为了方便在不同操作系统下进行开发、更新与快速构建，我们在项目根目录下为 Windows 和 macOS 均配置了快捷脚本：
 
-### 1. `update.bat` (一键更新项目)
-- **作用**：自动执行 `git pull` 拉取最新代码，并自动运行 `npm install` 升级可能变动的依赖库。
-- **用法**：在 Windows 上双击 `update.bat` 运行即可。
+### Windows 脚本 (.bat)
+- **`start_dev.bat`** (快速启动开发环境)：双击运行，执行 `npm run dev` 启动前端 Vite 和 Electron 开发模式。
+- **`update.bat`** (一键更新项目)：双击运行，自动执行 `git pull` 拉取最新代码，并运行 `npm install` 升级依赖。
+- **`build.bat`** (一键自动打包)：双击运行，执行前端资源打包并使用 `electron-builder` 构建 Windows 安装程序 (`.exe`)，输出至 `release/` 目录。
 
-### 2. `build.bat` (一键自动打包)
-- **作用**：自动安装缺失依赖，执行 `npm run build` 静态资源编译，并运行 `npm run dist` 直接在 `release/` 目录中生成安装程序。
-- **用法**：在 Windows 上双击 `build.bat` 运行即可。
+### macOS 脚本 (.sh)
+- **`start_dev.sh`** (快速启动开发环境)：在终端中运行 `./start_dev.sh` 启动开发调试模式。
+- **`update.sh`** (一键更新项目)：在终端中运行 `./update.sh` 自动拉取最新代码并安装/升级依赖。
+- **`build.sh`** (一键自动打包)：在终端中运行 `./build.sh` 编译前端资源，并使用 `electron-builder` 打包 macOS 应用程序，输出至 `release/` 目录。
 
 ---
 
