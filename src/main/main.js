@@ -148,6 +148,7 @@ function getSnappedSize(width) {
 // Utility to read settings
 function readSettings() {
   const defaultModels = ['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4'];
+  const defaultBlocks = ['台湾繁体', 'English'];
   try {
     if (fs.existsSync(settingsFilePath)) {
       const data = fs.readFileSync(settingsFilePath, 'utf-8').trim();
@@ -160,7 +161,8 @@ function readSettings() {
           translatePrompt: DEFAULT_PROMPT,
           proxyUrl: 'http://127.0.0.1:7890',
           memoCategories: [],
-          modelsList: defaultModels
+          modelsList: defaultModels,
+          translationBlocks: defaultBlocks
         };
       }
       const parsed = JSON.parse(data);
@@ -184,7 +186,8 @@ function readSettings() {
         translatePrompt: parsed.translatePrompt || DEFAULT_PROMPT,
         proxyUrl: parsed.proxyUrl !== undefined ? parsed.proxyUrl : 'http://127.0.0.1:7890',
         memoCategories: parsed.memoCategories || [],
-        modelsList: modelsList
+        modelsList: modelsList,
+        translationBlocks: parsed.translationBlocks || defaultBlocks
       };
     }
   } catch (error) {
@@ -198,7 +201,8 @@ function readSettings() {
     translatePrompt: DEFAULT_PROMPT,
     proxyUrl: 'http://127.0.0.1:7890',
     memoCategories: [],
-    modelsList: defaultModels
+    modelsList: defaultModels,
+    translationBlocks: defaultBlocks
   };
 }
 
@@ -480,7 +484,8 @@ ipcMain.handle('translate-text', async (event, text) => {
     baseUrl: settings.baseUrl,
     modelName: settings.modelName,
     translatePrompt: settings.translatePrompt,
-    proxyUrl: settings.proxyUrl
+    proxyUrl: settings.proxyUrl,
+    translationBlocks: settings.translationBlocks || ['台湾繁体', 'English']
   };
   
   logInfo('TRANSLATE_REQUEST', {
@@ -494,7 +499,8 @@ ipcMain.handle('translate-text', async (event, text) => {
       baseUrl: settings.baseUrl,
       modelName: settings.modelName,
       translatePrompt: settings.translatePrompt,
-      proxyUrl: settings.proxyUrl
+      proxyUrl: settings.proxyUrl,
+      translationBlocks: settings.translationBlocks || ['台湾繁体', 'English']
     };
     const result = await translateCustomerMessage(text, fullConfig);
     logInfo('TRANSLATE_RESPONSE', {

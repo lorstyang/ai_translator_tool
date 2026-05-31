@@ -98,22 +98,11 @@ function escapeRegExp(string) {
 async function translateCustomerMessage(text, config = {}) {
   const client = await getOpenAIClient(config);
   const model = config.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-  const systemPrompt = config.translatePrompt || DEFAULT_TRANSLATE_PROMPT;
+  let systemPrompt = config.translatePrompt || DEFAULT_TRANSLATE_PROMPT;
 
-  // Extract headers dynamically from systemPrompt
-  const headers = [];
-  const headerRegex = /【([^】]+)】/g;
-  let match;
-  while ((match = headerRegex.exec(systemPrompt)) !== null) {
-    const h = match[1].trim();
-    if (!headers.includes(h)) {
-      headers.push(h);
-    }
-  }
+  // Use explicitly configured translation blocks as headers
+  const headers = config.translationBlocks || ['台湾繁体', 'English'];
 
-  if (headers.length === 0) {
-    headers.push('台湾繁体', 'English');
-  }
 
   return requestWithRetry(async () => {
     const response = await client.chat.completions.create({

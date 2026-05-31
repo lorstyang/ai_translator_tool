@@ -28,19 +28,6 @@ import {
   Terminal
 } from 'lucide-react';
 
-const getHeadersFromPrompt = (prompt) => {
-  if (!prompt) return ['台湾繁体', 'English'];
-  const headers = [];
-  const headerRegex = /【([^】]+)】/g;
-  let match;
-  while ((match = headerRegex.exec(prompt)) !== null) {
-    const h = match[1].trim();
-    if (!headers.includes(h)) {
-      headers.push(h);
-    }
-  }
-  return headers.length > 0 ? headers : ['台湾繁体', 'English'];
-};
 
 const handleModifierEnter = (e, value, setValue) => {
   e.preventDefault();
@@ -179,7 +166,8 @@ export default function App() {
     translatePrompt: '',
     proxyUrl: 'http://127.0.0.1:7890',
     memoCategories: [],
-    modelsList: ['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4']
+    modelsList: ['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4'],
+    translationBlocks: ['台湾繁体', 'English']
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -233,6 +221,7 @@ export default function App() {
             if (loadedModel && !loadedList.includes(loadedModel)) {
               loadedList = [...loadedList, loadedModel];
             }
+            const loadedBlocks = savedSettings.translationBlocks || ['台湾繁体', 'English'];
             setSettings({
               apiKey: savedSettings.apiKey || '',
               baseUrl: savedSettings.baseUrl || 'https://api.openai.com/v1',
@@ -240,9 +229,10 @@ export default function App() {
               translatePrompt: savedSettings.translatePrompt || '',
               proxyUrl: savedSettings.proxyUrl !== undefined ? savedSettings.proxyUrl : 'http://127.0.0.1:7890',
               memoCategories: savedSettings.memoCategories || [],
-              modelsList: loadedList
+              modelsList: loadedList,
+              translationBlocks: loadedBlocks
             });
-            setCurrentHeaders(getHeadersFromPrompt(savedSettings.translatePrompt));
+            setCurrentHeaders(loadedBlocks);
           }
         })
         .catch(console.error);
@@ -734,13 +724,12 @@ export default function App() {
     });
   };
 
-  // --- Settings Actions ---
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     try {
       if (window.api) {
         await window.api.settings.save(settings);
-        setCurrentHeaders(getHeadersFromPrompt(settings.translatePrompt));
+        setCurrentHeaders(settings.translationBlocks || ['台湾繁体', 'English']);
         setSettingsSaved(true);
         setTimeout(() => setSettingsSaved(false), 2000);
       }
@@ -1411,6 +1400,89 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Translation Block Titles (Variables) */}
+              <div className="space-y-1.5 shrink-0">
+                <label className="text-[10px] font-bold text-slate-400">翻译板块标题 (Translation Blocks)</label>
+                <div className="flex flex-wrap gap-1.5 p-2 bg-slate-900/40 rounded-lg border border-slate-800/60 min-h-[40px] items-center">
+                  {(settings.translationBlocks || ['台湾繁体', 'English']).map((block) => (
+                    <span 
+                      key={block}
+                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 flex items-center space-x-1"
+                    >
+                      <span>{block}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const confirmDel = confirm(`确认删除翻译块标题 "${block}" 吗？这会导致该板块在首页不被解析显示。`);
+                          if (confirmDel) {
+                            const updated = (settings.translationBlocks || []).filter(b => b !== block);
+                            setSettings({
+                              ...settings,
+                              translationBlocks: updated
+                            });
+                          }
+                        }}
+                        className="text-indigo-400 hover:text-red-400 font-bold ml-1 text-[9px]"
+                        title="删除此标题"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                {/* Add new variable input row */}
+                <div className="flex gap-2 items-center pt-0.5">
+                  <input
+                    type="text"
+                    id="new-block-name"
+                    placeholder="新增翻译块标题，如: 日文客服..."
+                    className="glass-input flex-1 rounded-lg px-3 py-1.5 text-[11px] focus:outline-none text-slate-100 font-mono"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = e.target.value.trim();
+                        if (val) {
+                          const currentList = settings.translationBlocks || ['台湾繁体', 'English'];
+                          if (currentList.includes(val)) {
+                            alert('板块标题已存在');
+                            return;
+                          }
+                          setSettings({
+                            ...settings,
+                            translationBlocks: [...currentList, val]
+                          });
+                          e.target.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.getElementById('new-block-name');
+                      const val = input.value.trim();
+                      if (val) {
+                        const currentList = settings.translationBlocks || ['台湾繁体', 'English'];
+                        if (currentList.includes(val)) {
+                          alert('板块标题已存在');
+                          return;
+                        }
+                        setSettings({
+                          ...settings,
+                          translationBlocks: [...currentList, val]
+                        });
+                        input.value = '';
+                      }
+                    }}
+                    className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-650/80 hover:bg-indigo-600 text-white font-medium shadow-lg transition-all flex items-center space-x-1 shrink-0 active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5 animate-pulse" />
+                    <span>新增</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Translate System Prompt */}
               <div className="flex-1 flex flex-col min-h-[140px] space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 shrink-0">翻译 System Prompt (前置提示词)</label>
@@ -1418,7 +1490,7 @@ export default function App() {
                   value={settings.translatePrompt}
                   onChange={(e) => setSettings({ ...settings, translatePrompt: e.target.value })}
                   placeholder="请输入自定义翻译前置提示词..."
-                  className="glass-input w-full flex-1 rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono resize-none min-h-[80px]"
+                  className="glass-input w-full flex-1 rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono resize-y min-h-[120px] max-h-[600px]"
                 />
                 <p className="text-[9px] text-slate-500 leading-normal shrink-0">
                   提示：请确保提示词指示 AI 输出的格式包含【台湾繁体】与【English】关键字，程序才能正确截取并分割成两栏。
