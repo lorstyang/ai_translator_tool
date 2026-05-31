@@ -38,5 +38,10 @@ contextBridge.exposeInMainWorld('api', {
     openDbFolder: () => ipcRenderer.invoke('open-db-folder'),
     getMemo: () => ipcRenderer.invoke('get-memo'),
     saveMemo: (text) => ipcRenderer.invoke('save-memo', text),
+  },
+  logs: {
+    get: () => ipcRenderer.invoke('get-logs'),
+    clear: () => ipcRenderer.invoke('clear-logs'),
+    open: () => ipcRenderer.invoke('open-logs'),
   }
 });

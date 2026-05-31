@@ -24,7 +24,8 @@ import {
   FolderOpen,
   Plus,
   Minimize2,
-  Languages
+  Languages,
+  Terminal
 } from 'lucide-react';
 
 const getHeadersFromPrompt = (prompt) => {
@@ -212,6 +213,10 @@ export default function App() {
   const chatBottomRef = useRef(null);
   const chatInputRef = useRef(null);
 
+  // --- Logs Tab State ---
+  const [logsContent, setLogsContent] = useState('');
+  const logsBottomRef = useRef(null);
+
   // Initialize data on mount
   useEffect(() => {
     if (window.api) {
@@ -289,6 +294,19 @@ export default function App() {
       setTimeout(() => {
         chatInputRef.current?.focus();
       }, 50);
+    }
+  }, [activeTab]);
+
+  // Load logs whenever Logs tab gets focused
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      fetchLogs().then(() => {
+        setTimeout(() => {
+          if (logsBottomRef.current) {
+            logsBottomRef.current.scrollIntoView({ behavior: 'auto' });
+          }
+        }, 50);
+      });
     }
   }, [activeTab]);
 
@@ -507,6 +525,40 @@ export default function App() {
   const handleOpenDbFolder = () => {
     if (window.api && window.api.storage) {
       window.api.storage.openDbFolder();
+    }
+  };
+
+  const fetchLogs = async () => {
+    if (window.api && window.api.logs) {
+      try {
+        const content = await window.api.logs.get();
+        setLogsContent(content);
+      } catch (err) {
+        console.error('Failed to fetch logs:', err);
+      }
+    }
+  };
+
+  const handleClearLogs = async () => {
+    if (confirm('确认清空运行日志吗？')) {
+      if (window.api && window.api.logs) {
+        try {
+          await window.api.logs.clear();
+          setLogsContent('');
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
+  };
+
+  const handleOpenLogsFolder = async () => {
+    if (window.api && window.api.logs) {
+      try {
+        await window.api.logs.open();
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -880,6 +932,18 @@ export default function App() {
         >
           <Settings className="w-3.5 h-3.5 shrink-0" />
           <span>设置</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={`flex-1 py-1.5 rounded-md flex items-center justify-center space-x-1 transition-all ${
+            activeTab === 'logs' 
+              ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 shadow-inner' 
+              : 'hover:bg-slate-800/40 hover:text-slate-200 border border-transparent'
+          }`}
+        >
+          <Terminal className="w-3.5 h-3.5 shrink-0" />
+          <span>日志</span>
         </button>
       </nav>
 
@@ -1806,6 +1870,56 @@ export default function App() {
                     );
                   })
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- 6. LOGS TAB VIEW --- */}
+        {activeTab === 'logs' && (
+          <div className="flex-1 flex flex-col p-3.5 overflow-hidden h-full">
+            {/* Header info */}
+            <div className="space-y-1 border-b border-slate-900 pb-2 shrink-0 flex items-center justify-between">
+              <div>
+                <h2 className="text-xs font-semibold text-slate-200 flex items-center space-x-1.5 font-sans">
+                  <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>运行日志</span>
+                </h2>
+                <p className="text-[10px] text-slate-500 leading-relaxed font-sans">
+                  展示 API 交互详情与错误堆栈。
+                </p>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  onClick={handleOpenLogsFolder}
+                  className="text-[10px] px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                  title="在系统编辑器中打开 logs.txt"
+                >
+                  打开日志
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearLogs}
+                  className="text-[10px] px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-red-400 transition-colors"
+                  title="清空当前日志文件"
+                >
+                  清空
+                </button>
+              </div>
+            </div>
+
+            {/* Logs display container */}
+            <div className="flex-1 min-h-0 mt-3 flex flex-col">
+              <div className="flex-1 bg-slate-950/60 rounded-lg p-2.5 border border-slate-900/80 overflow-y-auto text-[10px] font-mono leading-relaxed select-text pr-1 whitespace-pre-wrap text-slate-350 selection:bg-indigo-500/20">
+                {logsContent ? (
+                  logsContent
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-center p-6 text-slate-650 h-full italic">
+                    暂无日志内容
+                  </div>
+                )}
+                <div ref={logsBottomRef} />
               </div>
             </div>
           </div>

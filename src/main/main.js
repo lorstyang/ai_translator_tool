@@ -17,6 +17,7 @@ const memoFilePath = path.join(app.getPath('userData'), 'memo.txt');
 
 // Import OpenAI service helpers
 const { translateCustomerMessage, normalChat } = require('./services/openai');
+const { logInfo, logError, getLogs, clearLogs, getLogFilePath } = require('./services/logger');
 
 // Utility to recursively calculate folder size
 function getFolderSize(dirPath) {
@@ -249,15 +250,15 @@ function createWindow() {
     }
   });
 
-  mainWindow.on('resize', () => {
-    const current = mainWindow.getBounds();
-    console.log(`[Main Process] [Event: resize] isFloatingBall: ${isFloatingBall}, size: ${current.width}x${current.height} @ (${current.x}, ${current.y})`);
-  });
+  // mainWindow.on('resize', () => {
+  //   const current = mainWindow.getBounds();
+  //   console.log(`[Main Process] [Event: resize] isFloatingBall: ${isFloatingBall}, size: ${current.width}x${current.height} @ (${current.x}, ${current.y})`);
+  // });
 
-  mainWindow.on('move', () => {
-    const current = mainWindow.getBounds();
-    console.log(`[Main Process] [Event: move] isFloatingBall: ${isFloatingBall}, size: ${current.width}x${current.height} @ (${current.x}, ${current.y})`);
-  });
+  // mainWindow.on('move', () => {
+  //   const current = mainWindow.getBounds();
+  //   console.log(`[Main Process] [Event: move] isFloatingBall: ${isFloatingBall}, size: ${current.width}x${current.height} @ (${current.x}, ${current.y})`);
+  // });
 
   // Load app
   if (isDev) {
@@ -280,18 +281,18 @@ function createWindow() {
     });
   };
 
-  mainWindow.on('resized', () => {
-    console.log(`[Main Process] [Event: resized] isFloatingBall: ${isFloatingBall}`);
-    saveBounds('resized');
-  });
-  mainWindow.on('moved', () => {
-    console.log(`[Main Process] [Event: moved] isFloatingBall: ${isFloatingBall}`);
-    saveBounds('moved');
-  });
-  mainWindow.on('close', () => {
-    console.log(`[Main Process] [Event: close]`);
-    saveBounds('close');
-  });
+  // mainWindow.on('resized', () => {
+  //   console.log(`[Main Process] [Event: resized] isFloatingBall: ${isFloatingBall}`);
+  //   saveBounds('resized');
+  // });
+  // mainWindow.on('moved', () => {
+  //   console.log(`[Main Process] [Event: moved] isFloatingBall: ${isFloatingBall}`);
+  //   saveBounds('moved');
+  // });
+  // mainWindow.on('close', () => {
+  //   console.log(`[Main Process] [Event: close]`);
+  //   saveBounds('close');
+  // });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -461,16 +462,34 @@ ipcMain.handle('save-history', async (event, history) => {
 
 // IPC: Call OpenAI translation
 ipcMain.handle('translate-text', async (event, text) => {
+  const settings = readSettings();
+  const config = {
+    apiKey: settings.apiKey ? (settings.apiKey.substring(0, 8) + '...' + settings.apiKey.substring(settings.apiKey.length - 4)) : '未配置',
+    baseUrl: settings.baseUrl,
+    modelName: settings.modelName,
+    translatePrompt: settings.translatePrompt,
+    proxyUrl: settings.proxyUrl
+  };
+  
+  logInfo('TRANSLATE_REQUEST', {
+    text,
+    config
+  });
+
   try {
-    const settings = readSettings();
-    const config = {
+    const fullConfig = {
       apiKey: settings.apiKey,
       baseUrl: settings.baseUrl,
       modelName: settings.modelName,
       translatePrompt: settings.translatePrompt,
       proxyUrl: settings.proxyUrl
     };
-    const result = await translateCustomerMessage(text, config);
+    const result = await translateCustomerMessage(text, fullConfig);
+    logInfo('TRANSLATE_RESPONSE', {
+      success: true,
+      outputs: result.outputs,
+      raw: result.raw
+    });
     return { success: true, ...result };
   } catch (error) {
     console.error('Translation IPC error:', error);
@@ -481,21 +500,42 @@ ipcMain.handle('translate-text', async (event, text) => {
     if (error.status) {
       errorMsg = `[中转站 API 报错 - HTTP ${error.status}] ${errorMsg}`;
     }
+    logError('TRANSLATE_ERROR', {
+      errorMsg,
+      stack: error.stack
+    });
     return { success: false, error: errorMsg };
   }
 });
 
 // IPC: Call OpenAI normal chat
 ipcMain.handle('normal-chat', async (event, messages) => {
+  const settings = readSettings();
+  const config = {
+    apiKey: settings.apiKey ? (settings.apiKey.substring(0, 8) + '...' + settings.apiKey.substring(settings.apiKey.length - 4)) : '未配置',
+    baseUrl: settings.baseUrl,
+    modelName: settings.modelName,
+    proxyUrl: settings.proxyUrl
+  };
+  
+  logInfo('CHAT_REQUEST', {
+    messagesCount: messages.length,
+    messages,
+    config
+  });
+
   try {
-    const settings = readSettings();
-    const config = {
+    const fullConfig = {
       apiKey: settings.apiKey,
       baseUrl: settings.baseUrl,
       modelName: settings.modelName,
       proxyUrl: settings.proxyUrl
     };
-    const reply = await normalChat(messages, config);
+    const reply = await normalChat(messages, fullConfig);
+    logInfo('CHAT_RESPONSE', {
+      success: true,
+      reply
+    });
     return { success: true, reply };
   } catch (error) {
     console.error('Chat IPC error:', error);
@@ -506,7 +546,36 @@ ipcMain.handle('normal-chat', async (event, messages) => {
     if (error.status) {
       errorMsg = `[中转站 API 报错 - HTTP ${error.status}] ${errorMsg}`;
     }
+    logError('CHAT_ERROR', {
+      errorMsg,
+      stack: error.stack
+    });
     return { success: false, error: errorMsg };
+  }
+});
+
+// IPC: Log Management
+ipcMain.handle('get-logs', async () => {
+  return getLogs();
+});
+
+ipcMain.handle('clear-logs', async () => {
+  return clearLogs();
+});
+
+ipcMain.handle('open-logs', async () => {
+  try {
+    const logPath = getLogFilePath();
+    if (fs.existsSync(logPath)) {
+      await shell.openPath(logPath);
+      return true;
+    }
+    fs.writeFileSync(logPath, '', 'utf-8');
+    await shell.openPath(logPath);
+    return true;
+  } catch (error) {
+    console.error('Failed to open log file:', error);
+    return false;
   }
 });
 
