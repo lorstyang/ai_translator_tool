@@ -255,9 +255,9 @@ function createWindow() {
   // Prevent resizing when in floating ball mode
   mainWindow.on('will-resize', (event, newBounds) => {
     const current = mainWindow.getBounds();
-    console.log(`[Main Process] [Event: will-resize] isFloatingBall: ${isFloatingBall}, current: ${current.width}x${current.height} @ (${current.x}, ${current.y}), target: ${newBounds.width}x${newBounds.height} @ (${newBounds.x}, ${newBounds.y})`);
+    // console.log(`[Main Process] [Event: will-resize] isFloatingBall: ${isFloatingBall}, current: ${current.width}x${current.height} @ (${current.x}, ${current.y}), target: ${newBounds.width}x${newBounds.height} @ (${newBounds.x}, ${newBounds.y})`);
     if (isFloatingBall) {
-      console.log('[Main Process] [Event: will-resize] Prevented window resize in floating ball mode.');
+      // console.log('[Main Process] [Event: will-resize] Prevented window resize in floating ball mode.');
       event.preventDefault();
     }
   });
