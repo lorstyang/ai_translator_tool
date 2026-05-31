@@ -147,6 +147,7 @@ function getSnappedSize(width) {
 
 // Utility to read settings
 function readSettings() {
+  const defaultModels = ['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4'];
   try {
     if (fs.existsSync(settingsFilePath)) {
       const data = fs.readFileSync(settingsFilePath, 'utf-8').trim();
@@ -155,14 +156,23 @@ function readSettings() {
           width: 380, 
           height: 580,
           baseUrl: 'https://api.openai.com/v1',
-          modelName: 'gpt-4o-mini',
+          modelName: 'gpt-5.4-pro',
           translatePrompt: DEFAULT_PROMPT,
           proxyUrl: 'http://127.0.0.1:7890',
-          memoCategories: []
+          memoCategories: [],
+          modelsList: defaultModels
         };
       }
       const parsed = JSON.parse(data);
       const snapped = getSnappedSize(parsed.width || 380);
+      const modelName = parsed.modelName || 'gpt-5.4-pro';
+      let modelsList = parsed.modelsList || defaultModels;
+      
+      // Ensure the loaded modelName is in the modelsList
+      if (modelName && !modelsList.includes(modelName)) {
+        modelsList = [...modelsList, modelName];
+      }
+
       return {
         width: snapped.width,
         height: snapped.height,
@@ -170,10 +180,11 @@ function readSettings() {
         y: parsed.y,
         apiKey: parsed.apiKey || '',
         baseUrl: parsed.baseUrl || 'https://api.openai.com/v1',
-        modelName: parsed.modelName || 'gpt-4o-mini',
+        modelName: modelName,
         translatePrompt: parsed.translatePrompt || DEFAULT_PROMPT,
         proxyUrl: parsed.proxyUrl !== undefined ? parsed.proxyUrl : 'http://127.0.0.1:7890',
-        memoCategories: parsed.memoCategories || []
+        memoCategories: parsed.memoCategories || [],
+        modelsList: modelsList
       };
     }
   } catch (error) {
@@ -183,10 +194,11 @@ function readSettings() {
     width: 380, 
     height: 580,
     baseUrl: 'https://api.openai.com/v1',
-    modelName: 'gpt-4o-mini',
+    modelName: 'gpt-5.4-pro',
     translatePrompt: DEFAULT_PROMPT,
     proxyUrl: 'http://127.0.0.1:7890',
-    memoCategories: []
+    memoCategories: [],
+    modelsList: defaultModels
   };
 }
 

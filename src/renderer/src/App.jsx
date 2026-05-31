@@ -175,10 +175,11 @@ export default function App() {
   const [settings, setSettings] = useState({
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
-    modelName: 'gpt-4o-mini',
+    modelName: 'gpt-5.4-pro',
     translatePrompt: '',
     proxyUrl: 'http://127.0.0.1:7890',
-    memoCategories: []
+    memoCategories: [],
+    modelsList: ['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4']
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -213,10 +214,6 @@ export default function App() {
   const chatBottomRef = useRef(null);
   const chatInputRef = useRef(null);
 
-  // --- Logs Tab State ---
-  const [logsContent, setLogsContent] = useState('');
-  const logsBottomRef = useRef(null);
-
   // Initialize data on mount
   useEffect(() => {
     if (window.api) {
@@ -230,13 +227,20 @@ export default function App() {
       window.api.settings.get()
         .then((savedSettings) => {
           if (savedSettings) {
+            const defaultModels = ['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4'];
+            const loadedModel = savedSettings.modelName || 'gpt-5.4-pro';
+            let loadedList = savedSettings.modelsList || defaultModels;
+            if (loadedModel && !loadedList.includes(loadedModel)) {
+              loadedList = [...loadedList, loadedModel];
+            }
             setSettings({
               apiKey: savedSettings.apiKey || '',
               baseUrl: savedSettings.baseUrl || 'https://api.openai.com/v1',
-              modelName: savedSettings.modelName || 'gpt-4o-mini',
+              modelName: loadedModel,
               translatePrompt: savedSettings.translatePrompt || '',
               proxyUrl: savedSettings.proxyUrl !== undefined ? savedSettings.proxyUrl : 'http://127.0.0.1:7890',
-              memoCategories: savedSettings.memoCategories || []
+              memoCategories: savedSettings.memoCategories || [],
+              modelsList: loadedList
             });
             setCurrentHeaders(getHeadersFromPrompt(savedSettings.translatePrompt));
           }
@@ -294,19 +298,6 @@ export default function App() {
       setTimeout(() => {
         chatInputRef.current?.focus();
       }, 50);
-    }
-  }, [activeTab]);
-
-  // Load logs whenever Logs tab gets focused
-  useEffect(() => {
-    if (activeTab === 'logs') {
-      fetchLogs().then(() => {
-        setTimeout(() => {
-          if (logsBottomRef.current) {
-            logsBottomRef.current.scrollIntoView({ behavior: 'auto' });
-          }
-        }, 50);
-      });
     }
   }, [activeTab]);
 
@@ -528,30 +519,6 @@ export default function App() {
     }
   };
 
-  const fetchLogs = async () => {
-    if (window.api && window.api.logs) {
-      try {
-        const content = await window.api.logs.get();
-        setLogsContent(content);
-      } catch (err) {
-        console.error('Failed to fetch logs:', err);
-      }
-    }
-  };
-
-  const handleClearLogs = async () => {
-    if (confirm('确认清空运行日志吗？')) {
-      if (window.api && window.api.logs) {
-        try {
-          await window.api.logs.clear();
-          setLogsContent('');
-        } catch (err) {
-          console.error(err);
-        }
-      }
-    }
-  };
-
   const handleOpenLogsFolder = async () => {
     if (window.api && window.api.logs) {
       try {
@@ -748,6 +715,25 @@ export default function App() {
     setChatError('');
   };
 
+  const handleAddCustomModel = (modelName) => {
+    const trimmed = modelName.trim();
+    if (!trimmed) return;
+    const currentList = settings.modelsList || ['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4'];
+    if (currentList.includes(trimmed)) {
+      setSettings({
+        ...settings,
+        modelName: trimmed
+      });
+      return;
+    }
+    const updatedList = [...currentList, trimmed];
+    setSettings({
+      ...settings,
+      modelsList: updatedList,
+      modelName: trimmed
+    });
+  };
+
   // --- Settings Actions ---
   const handleSaveSettings = async (e) => {
     e.preventDefault();
@@ -932,18 +918,6 @@ export default function App() {
         >
           <Settings className="w-3.5 h-3.5 shrink-0" />
           <span>设置</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('logs')}
-          className={`flex-1 py-1.5 rounded-md flex items-center justify-center space-x-1 transition-all ${
-            activeTab === 'logs' 
-              ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 shadow-inner' 
-              : 'hover:bg-slate-800/40 hover:text-slate-200 border border-transparent'
-          }`}
-        >
-          <Terminal className="w-3.5 h-3.5 shrink-0" />
-          <span>日志</span>
         </button>
       </nav>
 
@@ -1363,15 +1337,78 @@ export default function App() {
               </div>
 
               {/* Model Name */}
-              <div className="space-y-1 shrink-0">
+              <div className="space-y-1.5 shrink-0">
                 <label className="text-[10px] font-bold text-slate-400">默认模型型号 (Model)</label>
-                <input
-                  type="text"
-                  value={settings.modelName}
-                  onChange={(e) => setSettings({ ...settings, modelName: e.target.value })}
-                  placeholder="gpt-4o-mini"
-                  className="glass-input w-full rounded-lg px-3 py-1.5 text-xs focus:outline-none text-slate-100 font-mono"
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={settings.modelName}
+                    onChange={(e) => setSettings({ ...settings, modelName: e.target.value })}
+                    className="glass-input flex-1 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none text-slate-100 font-mono"
+                  >
+                    {(settings.modelsList || ['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4']).map((model) => (
+                      <option key={model} value={model} className="bg-slate-900 text-slate-100">
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                  
+                  {/* Delete current model button if it's not a default model */}
+                  {!['gpt-5.4-pro', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4'].includes(settings.modelName) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const confirmDelete = confirm(`确认从列表中删除模型 "${settings.modelName}" 吗？`);
+                        if (confirmDelete) {
+                          const updatedList = (settings.modelsList || []).filter(m => m !== settings.modelName);
+                          setSettings({
+                            ...settings,
+                            modelsList: updatedList,
+                            modelName: updatedList[0] || 'gpt-5.4-pro'
+                          });
+                        }
+                      }}
+                      className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all border border-red-500/20"
+                      title="删除此自定义模型"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Add custom model input row */}
+                <div className="flex gap-2 items-center pt-0.5">
+                  <input
+                    type="text"
+                    id="new-model-name"
+                    placeholder="新增自定义模型名称..."
+                    className="glass-input flex-1 rounded-lg px-3 py-1.5 text-[11px] focus:outline-none text-slate-100 font-mono"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = e.target.value.trim();
+                        if (val) {
+                          handleAddCustomModel(val);
+                          e.target.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.getElementById('new-model-name');
+                      const val = input.value.trim();
+                      if (val) {
+                        handleAddCustomModel(val);
+                        input.value = '';
+                      }
+                    }}
+                    className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-650/80 hover:bg-indigo-600 text-white font-medium shadow-lg transition-all flex items-center space-x-1 shrink-0 active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5 animate-pulse" />
+                    <span>新增</span>
+                  </button>
+                </div>
               </div>
 
               {/* Translate System Prompt */}
@@ -1406,14 +1443,24 @@ export default function App() {
                       <span className="text-[9px] font-bold text-slate-400">文件夹大小</span>
                       <span className="text-xs font-medium text-slate-200">{dbInfo.size || '正在计算...'}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleOpenDbFolder}
-                      className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 transition-colors flex items-center space-x-1"
-                    >
-                      <FolderOpen className="w-3 h-3" />
-                      <span>打开文件夹</span>
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleOpenLogsFolder}
+                        className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 transition-colors flex items-center space-x-1"
+                      >
+                        <Terminal className="w-3 h-3" />
+                        <span>打开日志</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenDbFolder}
+                        className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 transition-colors flex items-center space-x-1"
+                      >
+                        <FolderOpen className="w-3 h-3" />
+                        <span>打开文件夹</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1875,55 +1922,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- 6. LOGS TAB VIEW --- */}
-        {activeTab === 'logs' && (
-          <div className="flex-1 flex flex-col p-3.5 overflow-hidden h-full">
-            {/* Header info */}
-            <div className="space-y-1 border-b border-slate-900 pb-2 shrink-0 flex items-center justify-between">
-              <div>
-                <h2 className="text-xs font-semibold text-slate-200 flex items-center space-x-1.5 font-sans">
-                  <Terminal className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>运行日志</span>
-                </h2>
-                <p className="text-[10px] text-slate-500 leading-relaxed font-sans">
-                  展示 API 交互详情与错误堆栈。
-                </p>
-              </div>
-              <div className="flex items-center space-x-1.5">
-                <button
-                  type="button"
-                  onClick={handleOpenLogsFolder}
-                  className="text-[10px] px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-                  title="在系统编辑器中打开 logs.txt"
-                >
-                  打开日志
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearLogs}
-                  className="text-[10px] px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-red-400 transition-colors"
-                  title="清空当前日志文件"
-                >
-                  清空
-                </button>
-              </div>
-            </div>
 
-            {/* Logs display container */}
-            <div className="flex-1 min-h-0 mt-3 flex flex-col">
-              <div className="flex-1 bg-slate-950/60 rounded-lg p-2.5 border border-slate-900/80 overflow-y-auto text-[10px] font-mono leading-relaxed select-text pr-1 whitespace-pre-wrap text-slate-350 selection:bg-indigo-500/20">
-                {logsContent ? (
-                  logsContent
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-center p-6 text-slate-650 h-full italic">
-                    暂无日志内容
-                  </div>
-                )}
-                <div ref={logsBottomRef} />
-              </div>
-            </div>
-          </div>
-        )}
 
       </div>
       </div>
